@@ -34,14 +34,18 @@ method; deleting one is deleting a method.
 
 ## Installation
 
-Not published as a gem — clone it and point your `Gemfile` at the checkout, or copy `lib/` in.
+Ruby 3.2+.
 
-```bash
-git clone <this repo> && cd omakase
-bundle install
+```ruby
+gem "omakase-agents"     # the library is `Omakase`
 ```
 
-Requires Ruby 3.2+.
+Alpha (`0.0.1.alpha`) and not on RubyGems yet, so until it is, build it from a checkout:
+
+```bash
+gem build omakase-agents.gemspec
+gem install ./omakase-agents-*.gem
+```
 
 ## Usage
 
