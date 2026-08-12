@@ -1,0 +1,42 @@
+# frozen_string_literal: true
+
+module Omakase
+  # Runs model-written Ruby in the agent's own context.
+  # ponytail: instance_eval is not a sandbox — run such agents in a container.
+  module Executor
+    SOURCE = "(generated)"
+    MAX_OUTPUT = 4_000
+
+    module_function
+
+    def call(agent, code)
+      printed = StringIO.new
+      value = capturing(printed) { agent.instance_eval(code, SOURCE, 1) }
+      observation([printed.string.chomp, "=> #{value.inspect}"])
+    rescue ScriptError, StandardError => e
+      observation([printed.string.chomp, failure(e, code)])
+    end
+
+    # The model can only fix what it can locate, so point at the line.
+    def failure(error, code)
+      line = error.backtrace&.grep(/\A#{Regexp.escape(SOURCE)}:\d+/)&.first&.slice(/:(\d+)/, 1)&.to_i
+      source = code.lines[line - 1]&.strip if line&.positive?
+      ["#{error.class}: #{error.message}", ("line #{line}: #{source}" if source)].compact.join("\n")
+    end
+
+    def observation(parts)
+      text = parts.reject(&:empty?).join("\n")
+      text = "#{text[0, MAX_OUTPUT]}\n… (truncated)" if text.length > MAX_OUTPUT
+      text.empty? ? "(no output)" : text
+    end
+
+    # ponytail: global $stdout swap — fine single-threaded.
+    def capturing(io)
+      previous = $stdout
+      $stdout = io
+      yield
+    ensure
+      $stdout = previous
+    end
+  end
+end
