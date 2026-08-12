@@ -3,7 +3,7 @@
 A light agent framework — about 600 lines of library. *Omakase* (お任せ): you name what you want,
 the rest is left to the chef.
 
-**[esshka.github.io/omakase](https://esshka.github.io/omakase/)**
+**[esshka.github.io/omakase](https://esshka.github.io/omakase/)** · [rubygems](https://rubygems.org/gems/omakase-agents) ![gem](https://img.shields.io/gem/v/omakase-agents?include_prereleases&color=c8452e&label=)
 
 The whole philosophy: **an agent is an object**. Its fields are state, its methods are what the
 model can call, and the methods it *declares without a body* are written by the model at runtime —
@@ -42,13 +42,11 @@ Ruby 3.2+.
 gem "omakase-agents"     # the library is `Omakase`
 ```
 
-Alpha (`0.0.1.alpha`) and not on RubyGems yet, so until it is, build it from a checkout:
+From the command line the flag is needed — `0.0.1.alpha` is a prerelease, and RubyGems skips those
+unless asked. Bundler resolves it without one, since no stable version exists yet.
 
 ```bash
-git clone https://github.com/esshka/omakase
-cd omakase
-gem build omakase-agents.gemspec
-gem install ./omakase-agents-*.gem
+gem install omakase-agents --pre
 ```
 
 ## Usage

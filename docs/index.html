@@ -374,7 +374,7 @@ footer a:hover { color: var(--shu); border-color: var(--shu); }
       <span class="hint" id="hint">copy</span>
     </button>
     <a class="link" href="https://github.com/esshka/omakase">github ↗</a>
-    <a class="link" href="https://github.com/esshka/omakase#readme">readme ↗</a>
+    <a class="link" href="https://rubygems.org/gems/omakase-agents">rubygems ↗</a>
   </div>
 </header>
 
@@ -496,14 +496,13 @@ Omakase.configure <span class="k">do</span> |config|
     <div>
       <h2>Install</h2>
       <p class="note">
-        Alpha — <code>0.0.1.alpha</code>, not on RubyGems yet. Until it is, build it from the repo.
-        Ruby 3.2+, and any provider RubyLLM supports: Anthropic, OpenAI, Gemini, Bedrock, Ollama,
-        OpenRouter, and the rest.
+        Alpha — <code>0.0.1.alpha</code>. Ruby 3.2+, and any provider RubyLLM supports: Anthropic,
+        OpenAI, Gemini, Bedrock, Ollama, OpenRouter, and the rest.
       </p>
-<pre><code><span class="o">git clone https://github.com/esshka/omakase</span>
-<span class="o">cd omakase</span>
-<span class="o">gem build omakase-agents.gemspec</span>
-<span class="o">gem install ./omakase-agents-*.gem</span></code></pre>
+<pre><code><span class="o">gem install omakase-agents --pre</span>   <span class="c"># a prerelease, so the flag is needed</span>
+
+<span class="c"># or, in a Gemfile — bundler finds it without the flag</span>
+gem <span class="s">"omakase-agents"</span></code></pre>
     </div>
   </div>
 </section>
