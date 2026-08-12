@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omakase — agents as plain Ruby objects</title>
+<meta name="description" content="A light Ruby agent framework. An agent is an object: the methods you declare without a body are written by the model at runtime.">
+<meta name="theme-color" content="#f7f4ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12100e" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Omakase — agents as plain Ruby objects">
+<meta property="og:description" content="Declare a method without a body; the model writes it at runtime. ~600 lines on top of RubyLLM.">
+<meta property="og:url" content="https://esshka.github.io/omakase/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23c8452e'/><text x='16' y='24' font-size='22' text-anchor='middle' fill='%23f7f4ee' font-family='serif'>任</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..700,0..100,0..1&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f7f4ee;
+  --ink: #14110f;
+  --muted: #6b635a;
+  --rule: #ded7cb;
+  --shu: #c8452e;
+  --card: #efeae1;
+  --grain: 0.035;
+
+  --display: "Fraunces", Georgia, serif;
+  --body: "IBM Plex Sans", ui-sans-serif, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #12100e;
+    --ink: #ece6da;
+    --muted: #968c7e;
+    --rule: #2b2622;
+    --shu: #e4633f;
+    --card: #1a1714;
+    --grain: 0.05;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* paper grain */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99;
+  opacity: var(--grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.wrap {
+  width: min(72rem, 100% - 3rem);
+  margin-inline: auto;
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ---------- hero ---------- */
+
+header {
+  padding: clamp(3.5rem, 12vh, 8rem) 0 clamp(2.5rem, 7vh, 5rem);
+}
+
+.brandline {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.brandline::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+  transform: translateY(-0.35em);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 2rem;
+  margin-top: 2.5rem;
+}
+
+h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-variation-settings: "SOFT" 30, "WONK" 1, "opsz" 120;
+  font-weight: 400;
+  font-size: clamp(3.6rem, 13vw, 9.5rem);
+  line-height: 0.86;
+  letter-spacing: -0.035em;
+}
+
+h1 em {
+  font-style: normal;
+  color: var(--shu);
+}
+
+.kana {
+  font-family: var(--display);
+  font-size: clamp(1.4rem, 3vw, 2rem);
+  color: var(--muted);
+  letter-spacing: 0.35em;
+}
+
+.stamp {
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  border: 2.5px solid var(--shu);
+  border-radius: 8px;
+  color: var(--shu);
+  font-family: var(--display);
+  font-size: 2.7rem;
+  line-height: 1;
+  transform: rotate(-6deg);
+  flex: none;
+}
+
+.tagline {
+  margin: 2.2rem 0 0;
+  max-width: 34ch;
+  font-family: var(--display);
+  font-variation-settings: "SOFT" 20, "opsz" 40;
+  font-size: clamp(1.35rem, 2.6vw, 1.9rem);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.sub {
+  margin: 1.2rem 0 0;
+  max-width: 52ch;
+  color: var(--muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 2.2rem;
+}
+
+.copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--card);
+  color: inherit;
+  font-family: var(--mono);
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.copy:hover { border-color: var(--shu); transform: translateY(-1px); }
+.copy span.hint { color: var(--muted); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; }
+
+.link {
+  font-family: var(--mono);
+  font-size: 0.86rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--rule);
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.link:hover { color: var(--shu); border-color: var(--shu); }
+
+/* ---------- courses ---------- */
+
+section { border-top: 1px solid var(--rule); padding: clamp(2.5rem, 7vh, 4.5rem) 0; }
+
+.course {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: clamp(1rem, 4vw, 3rem);
+  align-items: start;
+}
+
+.numeral {
+  font-family: var(--display);
+  font-size: 2.1rem;
+  line-height: 1;
+  color: var(--shu);
+  font-variation-settings: "WONK" 1;
+}
+
+.numeral small {
+  display: block;
+  margin-top: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+h2 {
+  margin: 0 0 0.6rem;
+  font-family: var(--display);
+  font-variation-settings: "SOFT" 20, "opsz" 60;
+  font-weight: 400;
+  font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.note { margin: 0 0 1.6rem; max-width: 58ch; color: var(--muted); }
+.note strong { color: var(--ink); font-weight: 500; }
+
+/* ---------- code ---------- */
+
+pre {
+  margin: 0;
+  padding: 1.3rem 1.4rem;
+  overflow-x: auto;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--shu);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.855rem;
+  line-height: 1.75;
+  tab-size: 2;
+}
+
+pre + pre { margin-top: 1rem; }
+
+code { font-family: var(--mono); }
+.note code { font-size: 0.9em; background: var(--card); padding: 0.1em 0.35em; border-radius: 2px; }
+
+.k { color: var(--shu); }
+.s { color: #4a7c59; }
+.y { color: #8a6d3b; }
+.c { color: var(--muted); font-style: italic; }
+.o { color: var(--muted); }
+
+@media (prefers-color-scheme: dark) {
+  .s { color: #85b79d; }
+  .y { color: #c8a45c; }
+}
+
+/* ---------- transcript ---------- */
+
+.turn { display: grid; grid-template-columns: 4.2rem minmax(0, 1fr); gap: 0.8rem; }
+.turn + .turn { margin-top: 0.45rem; }
+.who { color: var(--shu); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.who.obs { color: var(--muted); }
+
+/* ---------- two-up ---------- */
+
+.two {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1.6rem;
+  margin-top: 0.4rem;
+}
+
+.two > div { border-top: 1px solid var(--rule); padding-top: 1rem; }
+.two h3 {
+  margin: 0 0 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--shu);
+}
+.two p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+/* ---------- footer ---------- */
+
+footer {
+  border-top: 1px solid var(--rule);
+  padding: 2.5rem 0 4rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+footer a { border-bottom: 1px solid var(--rule); }
+footer a:hover { color: var(--shu); border-color: var(--shu); }
+
+/* ---------- entrance ---------- */
+
+@media (prefers-reduced-motion: no-preference) {
+  .rise { animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) backwards; }
+  .rise:nth-of-type(1) { animation-delay: 0.05s; }
+  header .brandline { animation-delay: 0s; }
+  header h1 { animation-delay: 0.08s; }
+  header .tagline { animation-delay: 0.18s; }
+  header .sub { animation-delay: 0.26s; }
+  header .actions { animation-delay: 0.34s; }
+  .stamp { animation: press 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) 0.5s backwards; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(0.9rem); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes press {
+  from { opacity: 0; transform: rotate(10deg) scale(1.5); }
+  to { opacity: 1; transform: rotate(-6deg) scale(1); }
+}
+
+@media (max-width: 40rem) {
+  .hero { grid-template-columns: 1fr; }
+  .stamp { width: 64px; height: 64px; font-size: 2rem; }
+  .course { grid-template-columns: 1fr; gap: 0.9rem; }
+  .numeral { display: flex; align-items: baseline; gap: 0.9rem; font-size: 1.8rem; }
+  .numeral small { margin-top: 0; }
+}
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <div class="brandline rise">Ruby · alpha · MIT</div>
+
+  <div class="hero">
+    <div>
+      <h1 class="rise">Omak<em>a</em>se</h1>
+      <div class="kana">お任せ</div>
+    </div>
+    <div class="stamp">任</div>
+  </div>
+
+  <p class="tagline rise">You name what you want. The rest is left to the chef.</p>
+
+  <p class="sub rise">
+    A light agent framework for Ruby — about 600 lines on top of RubyLLM. An agent is an object:
+    fields are state, methods are what the model can call, and the methods you declare
+    <em>without a body</em> are written by the model at runtime.
+  </p>
+
+  <div class="actions rise">
+    <button class="copy" id="copy" type="button">
+      <code>gem&nbsp;"omakase-agents"</code>
+      <span class="hint" id="hint">copy</span>
+    </button>
+    <a class="link" href="https://github.com/esshka/omakase">github ↗</a>
+    <a class="link" href="https://github.com/esshka/omakase#readme">readme ↗</a>
+  </div>
+</header>
+
+<section class="wrap">
+  <div class="course">
+    <div class="numeral">壱<small>declare</small></div>
+    <div>
+      <h2>An agent is an object</h2>
+      <p class="note">
+        Ordinary methods are what the model can call — there is no tool registry, so adding a tool is
+        adding a method. <strong>Declared</strong> methods have no body: the name and prompt are the
+        specification, the block is the contract.
+      </p>
+<pre><code><span class="k">class</span> InventoryAgent <span class="o">&lt;</span> Omakase::Agent
+  instructions <span class="s">"You check inventory."</span>
+
+  describe <span class="s">"Units of an item on hand"</span>
+  <span class="k">def</span> stock_of(item) = STOCK.dig(item, <span class="y">:stock</span>) || <span class="y">0</span>
+
+  describe <span class="s">"Unit price of an item"</span>
+  <span class="k">def</span> price_of(item) = STOCK.dig(item, <span class="y">:price</span>) || <span class="y">0.0</span>
+
+  generates <span class="y">:can_fulfill_order</span>, <span class="s">"Does the order fit the budget?"</span> <span class="k">do</span>
+    boolean <span class="y">:can_fulfill</span>
+    number  <span class="y">:total_cost</span>
+    array   <span class="y">:unavailable</span>, of: <span class="y">:string</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+
+InventoryAgent.can_fulfill_order(items: %w[apple banana orange], budget: <span class="y">5.0</span>)
+<span class="c"># => {can_fulfill: false, total_cost: 2.05, unavailable: ["orange"]}</span></code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="course">
+    <div class="numeral">弐<small>act</small></div>
+    <div>
+      <h2>It acts by writing Ruby</h2>
+      <p class="note">
+        The model gets one tool. Its code is evaluated on the agent itself, so the agent's methods and
+        state <em>are</em> the API; what the code printed and returned comes back as the observation.
+        It answers with <code>finish(value)</code> — computed, not retyped.
+      </p>
+<pre><div class="turn"><span class="who">ruby</span><span><span class="o">items.map { |i| [i, stock_of(i), price_of(i)] }</span></span></div><div class="turn"><span class="who obs">out</span><span class="o">=&gt; [["apple", 50, 0.75], ["banana", 30, 0.5], ["orange", 0, 0.8]]</span></div><div class="turn"><span class="who">ruby</span><span><span class="o">finish(can_fulfill: <span class="y">false</span>, total_cost: <span class="y">2.05</span>, unavailable: [<span class="s">"orange"</span>])</span></span></div><div class="turn"><span class="who obs">out</span><span class="o">answer accepted</span></div></pre>
+      <p class="note" style="margin-top:1.4rem">
+        A failure comes back with the line that raised. An answer off contract is rejected into the same
+        loop. Ten tool calls and thirty seconds per execution, then it answers with what it has.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="course">
+    <div class="numeral">参<small>contract</small></div>
+    <div>
+      <h2>The return type is the contract</h2>
+      <p class="note">
+        A block is a schema the provider must fill, so callers get validated data rather than text to
+        parse. A scalar is the same thing, unwrapped. A Ruby class means the method hands back
+        the object the code built.
+      </p>
+<pre><code>generates <span class="y">:summarize</span>                          <span class="c"># no prompt: the method name is the prompt</span>
+generates <span class="y">:score</span>, returns: <span class="y">:integer</span>          <span class="c"># => 7</span>
+generates <span class="y">:file_ticket</span>, returns: Ticket        <span class="c"># => #&lt;struct Ticket id="A-1"&gt;</span>
+
+generates <span class="y">:analyze</span>, <span class="s">"Analyze the feedback."</span> <span class="k">do</span>
+  string <span class="y">:sentiment</span>, enum: %w[positive negative neutral mixed]
+  array  <span class="y">:topics</span>, of: <span class="y">:string</span>
+<span class="k">end</span></code></pre>
+      <div class="two">
+        <div>
+          <h3>:predict</h3>
+          <p>One call, straight into the schema. No code runs. Classification, extraction, rewriting.</p>
+        </div>
+        <div>
+          <h3>:code_act &nbsp;<span style="color:var(--muted);font-weight:400">default</span></h3>
+          <p>The loop above. Multi-step work, anything that should use the agent's own methods.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="course">
+    <div class="numeral">肆<small>rails</small></div>
+    <div>
+      <h2>At home in Rails</h2>
+      <p class="note">
+        Agents live in <code>app/agents</code>, reloading is safe, printing is per-thread so Puma is fine,
+        and every call lands on the notification bus with its tokens and latency.
+      </p>
+<pre><code><span class="c"># config/initializers/omakase.rb</span>
+Omakase.configure <span class="k">do</span> |config|
+  config.anthropic_api_key = Rails.application.credentials.anthropic_api_key
+  config.request_timeout   = <span class="y">60</span>
+  config.instrumenter      = ActiveSupport::Notifications
+<span class="k">end</span>
+
+<span class="k">class</span> TriageJob <span class="o">&lt;</span> ApplicationJob
+  <span class="k">def</span> perform(ticket) = ticket.update!(SupportAgent.triage(message: ticket.body))
+<span class="k">end</span></code></pre>
+      <p class="note" style="margin-top:1.4rem">
+        <strong>One rule.</strong> Generated code runs with <code>instance_eval</code> in your process,
+        where <code>ActiveRecord</code> and <code>ENV</code> live. Untrusted input belongs to
+        <code>:predict</code>; <code>:code_act</code> is for work you control — or swap in your own
+        isolated executor.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="course">
+    <div class="numeral">伍<small>serve</small></div>
+    <div>
+      <h2>Install</h2>
+      <p class="note">
+        Alpha — <code>0.0.1.alpha</code>, not on RubyGems yet. Until it is, build it from the repo.
+        Ruby 3.2+, and any provider RubyLLM supports: Anthropic, OpenAI, Gemini, Bedrock, Ollama,
+        OpenRouter, and the rest.
+      </p>
+<pre><code><span class="o">git clone https://github.com/esshka/omakase</span>
+<span class="o">cd omakase</span>
+<span class="o">gem build omakase-agents.gemspec</span>
+<span class="o">gem install ./omakase-agents-*.gem</span></code></pre>
+    </div>
+  </div>
+</section>
+
+<footer class="wrap">
+  <div>MIT · Ruby 3.2+ · built on <a href="https://rubyllm.com">RubyLLM</a></div>
+  <div><a href="https://github.com/esshka/omakase">github.com/esshka/omakase</a></div>
+</footer>
+
+<script>
+  const button = document.getElementById("copy");
+  const hint = document.getElementById("hint");
+  button.addEventListener("click", async () => {
+    await navigator.clipboard.writeText('gem "omakase-agents"');
+    hint.textContent = "copied";
+    setTimeout(() => (hint.textContent = "copy"), 1600);
+  });
+</script>
+
+</body>
+</html>

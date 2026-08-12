@@ -3,6 +3,8 @@
 A light agent framework — about 600 lines of library. *Omakase* (お任せ): you name what you want,
 the rest is left to the chef.
 
+**[esshka.github.io/omakase](https://esshka.github.io/omakase/)**
+
 The whole philosophy: **an agent is an object**. Its fields are state, its methods are what the
 model can call, and the methods it *declares without a body* are written by the model at runtime —
 the method name and prompt are the specification, the schema is the contract.
