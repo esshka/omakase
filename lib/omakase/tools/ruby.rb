@@ -8,19 +8,31 @@ module Omakase
       description <<~TEXT
         Evaluate Ruby in the context of the agent object: its methods and state are
         directly available on self. Anything printed, plus the value of the last
-        expression, is returned to you.
+        expression, is returned to you. Call finish(value) to answer.
       TEXT
 
       param :code, desc: "Ruby source to evaluate."
 
-      def initialize(agent)
+      attr_reader :answer
+
+      def initialize(agent, schema)
         super()
         @agent = agent
+        @schema = schema
       end
 
       def name = "ruby"
 
-      def execute(code:) = Executor.call(@agent, code)
+      def execute(code:)
+        outcome = Executor.call(@agent, code)
+        return outcome unless outcome.is_a?(Executor::Answer)
+
+        @answer = Executor::Answer.new(value: @schema.take(outcome.value))
+        halt("Answer accepted.")
+      rescue Error => e
+        # Off-contract answers are corrected inside the same loop, not by another request.
+        "finish rejected: #{e.message}"
+      end
     end
   end
 end

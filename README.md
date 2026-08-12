@@ -1,6 +1,6 @@
 # Omakase
 
-A light agent framework — about 350 lines of library. *Omakase* (お任せ): you name what you want,
+A light agent framework — about 500 lines of library. *Omakase* (お任せ): you name what you want,
 the rest is left to the chef.
 
 The whole philosophy: **an agent is an object**. Its fields are state, its methods are what the
@@ -89,6 +89,8 @@ generates :count_items, returns: :integer      # :string (default), :integer, :n
 ```
 
 Both forms are the same mechanism: a schema whose only property is `result` unwraps to that value.
+A Ruby class works too — `returns: Ticket` — and then the method hands back the object rather than
+data; see [`:code_act`](#strategies) for what that requires.
 
 ### Models and providers
 
@@ -137,8 +139,8 @@ Calling a generation method does four things:
 2. **Renders the prompt.** The agent's `instructions` are the system prompt; the method's prompt and
    its arguments are the user message.
 3. **Runs the strategy** (below), which is where the LLM work happens.
-4. **Casts the answer.** The reply is JSON in the declared schema; `Schema#cast` symbolizes it,
-   unwraps a lone `result`, and raises rather than hand back something off-contract.
+4. **Holds it to the contract.** Whether the answer arrived as JSON or as a Ruby value from
+   `finish`, it is symbolized, unwrapped if it is a lone `result`, and refused if it is off-contract.
 
 ### Strategies
 
@@ -154,13 +156,24 @@ goes in, structured output comes back; an answer that misses the schema gets one
 turn naming what was wrong. No code runs. Right for classification, extraction, rewriting — anything the model can answer from the prompt alone.
 
 **`:code_act`** *(default)* — the model acts by writing Ruby. It gets one tool, `ruby`, whose code
-is `instance_eval`'d on the agent, so the agent's methods and state are the API; anything printed
-and the value of the last expression come back as the observation, and the loop repeats until the
-model is done. A failure comes back with the line that raised, and `doc(object)` prints what an
-object of an unfamiliar type offers, so the model can correct itself instead of guessing. `Capabilities` lists the agent's own methods (with their `describe` text) in the
-system prompt, minus the method being written, so it cannot recurse into itself. The answer is then
-taken in a second, tool-free turn, because providers fall back to prose when tools and structured
-output arrive in the same request.
+is `instance_eval`d on the agent, so the agent’s methods and state are the API; anything printed and
+the value of the last expression come back as the observation, and the loop repeats until the model
+calls `finish(value)`. `Capabilities` lists the agent’s own methods (with their `describe` text) in
+the system prompt, minus the method being written, so it cannot recurse into itself. A failure comes
+back with the line that raised, `doc(object)` prints what an object of an unfamiliar type offers, and
+an answer that misses the contract is rejected into the same loop — the model corrects itself without
+another request.
+
+Because the answer is computed rather than retyped, the return type can be a Ruby class and the
+method hands back the object itself:
+
+```ruby
+generates :file_ticket, "File a ticket for the message.", returns: Ticket
+# => #<struct Ticket id="A-1", severity="high">
+```
+
+That needs `:code_act` — `:predict` has no code in which to build one. If the model never calls
+`finish`, the strategy falls back to a tool-free turn under the JSON schema.
 
 Set the default per agent with `strategy :predict`, per method with
 `generates :triage, strategy: :predict`, or pass your own object:
@@ -182,7 +195,8 @@ generates :plan, strategy: CriticStrategy
     lib/omakase/agent.rb           the DSL: model, instructions, describe, generates
     lib/omakase/generation.rb      a declared method: prompt, schema, strategy
     lib/omakase/request.rb         one invocation of one
-    lib/omakase/schema.rb          return types
+    lib/omakase/schema.rb          return types the provider enforces
+    lib/omakase/type.rb            return types that are a Ruby class
     lib/omakase/capabilities.rb    the agent’s own methods, listed for the model
     lib/omakase/doc.rb             what an unfamiliar object offers, for generated code
     lib/omakase/executor.rb        runs generated Ruby against the agent
@@ -210,7 +224,26 @@ ruby examples/inventory_agent.rb
 Generated code is evaluated in-process with `instance_eval`. There is no sandbox: run agents that
 execute model-written code inside a container or VM.
 
-## Scope
+## Roadmap
 
-Deliberately not included: tracing, events, MCP, skills, memory, async, and returning live Ruby
-objects from a generation method. The seams are a strategy (`call(request)`) and RubyLLM itself.
+What is not here yet, roughly in the order it would earn its place:
+
+- [x] **Live objects** — the answer is computed in code and handed back as the object, not retyped
+      as JSON. Done: `finish(value)` plus `returns: SomeClass`.
+- [ ] **Tracing** — RubyLLM already emits `chat.ruby_llm` and `tool_call.ruby_llm` instrumentation
+      events, so this is a subscriber and a way to read the result, not new plumbing.
+- [ ] **Conversation history** — the chat is fresh per call. Keeping one per agent would let a
+      method continue where the last one left off, at the cost of deciding what to keep.
+- [ ] **Session storage** — persist that history and the agent state so a run can be resumed.
+- [ ] **MCP tools** — external tools over the Model Context Protocol, via `ruby_llm-mcp`. Cheap to
+      add, since generated code can call anything the agent exposes.
+- [ ] **Skills** — capabilities as markdown files with front matter, loaded on demand rather than
+      all sitting in the system prompt.
+- [ ] **Memory** — recall that survives across sessions, backed by vector search.
+- [ ] **Concurrency** — parallel generation calls. Blocked on the executor: it swaps `$stdout` to
+      capture output, which is process-global.
+
+## Safety
+
+Generated code is evaluated in-process with `instance_eval`. There is no sandbox: run agents that
+execute model-written code inside a container or VM.

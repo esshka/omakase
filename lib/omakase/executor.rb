@@ -5,14 +5,21 @@ module Omakase
   # ponytail: instance_eval is not a sandbox — run such agents in a container.
   module Executor
     SOURCE = "(generated)"
+    RESULT = :omakase_result
     MAX_OUTPUT = 4_000
+
+    # What `finish(value)` handed back: the answer as a Ruby value, not as text.
+    Answer = Data.define(:value)
 
     module_function
 
     def call(agent, code)
       printed = StringIO.new
-      value = capturing(printed) { agent.instance_eval(code, SOURCE, 1) }
-      observation([printed.string.chomp, "=> #{value.inspect}"])
+      answer = catch(RESULT) do
+        value = capturing(printed) { agent.instance_eval(code, SOURCE, 1) }
+        return observation([printed.string.chomp, "=> #{value.inspect}"])
+      end
+      Answer.new(value: answer)
     rescue ScriptError, StandardError => e
       observation([printed.string.chomp, failure(e, code)])
     end

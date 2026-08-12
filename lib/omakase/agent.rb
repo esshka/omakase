@@ -84,6 +84,9 @@ module Omakase
     # For generated code meeting an object whose type it does not know.
     def doc(object) = puts(Doc.of(object))
 
+    # How generated code answers: with the value itself.
+    def finish(value) = throw(Executor::RESULT, value)
+
     private
 
     def generate(name, inputs)

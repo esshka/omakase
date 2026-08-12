@@ -4,7 +4,7 @@ require "minitest/autorun"
 require_relative "../lib/omakase"
 
 # Plays the provider: records how each chat was configured and runs the script,
-# which may drive the tools before returning the content.
+# which may drive the tool before returning the content.
 class FakeChat
   Response = Struct.new(:content)
 
@@ -58,6 +58,14 @@ class InventoryAgent < Omakase::Agent
   generates :total_stock, "Total stock for the given items.", returns: :integer
 end
 
+Ticket = Struct.new(:id, :severity)
+
+class TicketAgent < Omakase::Agent
+  instructions "You file tickets."
+
+  generates :file, "File a ticket for the message.", returns: Ticket
+end
+
 class PredictTest < Minitest::Test
   def test_a_scalar_return_type_unwraps_to_the_value
     chat = FakeChat.new { {"result" => "positive"} }
@@ -95,7 +103,7 @@ class PredictTest < Minitest::Test
 end
 
 class CodeActTest < Minitest::Test
-  # The model works with the tool, then answers in a tool-free second turn.
+  # The model that never calls finish: it works, then answers under the schema.
   def chat_running(code, observed:, answer:)
     FakeChat.new do |fake|
       next answer if fake.schema
@@ -139,6 +147,48 @@ class CodeActTest < Minitest::Test
     assert_includes observation, "ticker()"
     assert_includes observation, "shares()"
     refute_includes observation, "each_with_object"
+  end
+
+  def test_finish_answers_in_one_turn_with_the_computed_value
+    chat = FakeChat.new do |fake|
+      fake.run("finish(stock_of(:apple) + stock_of(:pear))")
+      "done"
+    end
+
+    assert_equal 7, InventoryAgent.new({apple: 3, pear: 4}, chat:).total_stock(items: [])
+    assert_equal 1, chat.tasks.size
+    assert_nil chat.schema
+  end
+
+  def test_an_off_contract_finish_is_corrected_inside_the_loop
+    rejected = nil
+    chat = FakeChat.new do |fake|
+      rejected = fake.run(%(finish("three")))
+      fake.run("finish(3)")
+      "done"
+    end
+
+    assert_equal 3, InventoryAgent.new({}, chat:).total_stock(items: [])
+    assert_includes rejected, %(finish rejected: expected <integer>, got "three")
+  end
+
+  def test_a_ruby_class_return_type_hands_back_the_object_itself
+    chat = FakeChat.new do |fake|
+      fake.run(%(finish(Ticket.new("A-1", "high"))))
+      "done"
+    end
+
+    ticket = TicketAgent.new(chat:).file(message: "it arrived cracked")
+
+    assert_instance_of Ticket, ticket
+    assert_equal "A-1", ticket.id
+  end
+
+  def test_the_instructions_name_the_shape_finish_must_take
+    chat = FakeChat.new { |fake| fake.schema ? {"result" => 0} : "done" }
+    InventoryAgent.new({}, chat:).total_stock(items: [])
+
+    assert_includes chat.instructions.first, "finish(<integer>)"
   end
 
   def test_instructions_list_the_agents_methods_but_not_the_one_being_written
@@ -200,8 +250,15 @@ class DslTest < Minitest::Test
     RubyLLM.config.ollama_api_base = nil
   end
 
+  def test_a_ruby_class_return_type_needs_generated_code
+    error = assert_raises(Omakase::Error) { Omakase::Schema.define(returns: Ticket).definition }
+
+    assert_match(/needs the :code_act strategy/, error.message)
+  end
+
   def test_only_scalars_are_accepted_as_shorthand_return_types
     error = assert_raises(Omakase::Error) { Omakase::Schema.define(returns: :order) }
+
     assert_match(/returns: must be one of/, error.message)
   end
 end
