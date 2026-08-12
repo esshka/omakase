@@ -162,7 +162,8 @@ calls `finish(value)`. `Capabilities` lists the agent’s own methods (with thei
 the system prompt, minus the method being written, so it cannot recurse into itself. A failure comes
 back with the line that raised, `doc(object)` prints what an object of an unfamiliar type offers, and
 an answer that misses the contract is rejected into the same loop — the model corrects itself without
-another request.
+another request. Nothing in the provider bounds a tool loop, so the tool does: ten calls, then a turn
+to answer with what it has.
 
 Because the answer is computed rather than retyped, the return type can be a Ruby class and the
 method hands back the object itself:

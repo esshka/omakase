@@ -191,6 +191,14 @@ class CodeActTest < Minitest::Test
     assert_includes chat.instructions.first, "finish(<integer>)"
   end
 
+  def test_the_tool_call_budget_bounds_the_loop
+    tool = Omakase::Tools::Ruby.new(InventoryAgent.new({}), Omakase::Schema.define(returns: :integer), budget: 2)
+
+    2.times { assert_equal "=> 1", tool.execute(code: "1") }
+    assert_match(/No tool calls left/, tool.execute(code: "1"))
+    assert_instance_of RubyLLM::Tool::Halt, tool.execute(code: "1")
+  end
+
   def test_instructions_list_the_agents_methods_but_not_the_one_being_written
     chat = FakeChat.new { |fake| fake.schema ? {"result" => 0} : "done" }
     InventoryAgent.new({}, chat:).total_stock(items: [])
