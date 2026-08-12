@@ -43,6 +43,8 @@ gem "omakase-agents"     # the library is `Omakase`
 Alpha (`0.0.1.alpha`) and not on RubyGems yet, so until it is, build it from a checkout:
 
 ```bash
+git clone https://github.com/esshka/omakase
+cd omakase
 gem build omakase-agents.gemspec
 gem install ./omakase-agents-*.gem
 ```

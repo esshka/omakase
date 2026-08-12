@@ -15,8 +15,16 @@ Gem::Specification.new do |spec|
     the model at runtime — the method name and prompt are the specification, the schema is the
     contract. The model acts by writing Ruby that runs on the agent itself.
   TEXT
+  spec.homepage = "https://github.com/esshka/omakase"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2"
+
+  spec.metadata = {
+    "homepage_uri" => spec.homepage,
+    "source_code_uri" => spec.homepage,
+    "bug_tracker_uri" => "#{spec.homepage}/issues",
+    "rubygems_mfa_required" => "true"
+  }
 
   spec.files = Dir["lib/**/*.rb"] + %w[README.md LICENSE]
   spec.require_paths = ["lib"]
