@@ -17,11 +17,13 @@ module Omakase
 
       attr_reader :answer
 
-      def initialize(agent, schema, budget: BUDGET)
+      def initialize(agent, schema, budget: BUDGET, timeout: Executor::TIMEOUT, executor: Omakase.executor)
         super()
         @agent = agent
         @schema = schema
         @budget = budget
+        @timeout = timeout
+        @executor = executor
         @calls = 0
       end
 
@@ -33,7 +35,7 @@ module Omakase
         return "No tool calls left — answer with what you have." if @calls == @budget + 1
         return halt("Tool budget spent.") if @calls > @budget + 1
 
-        outcome = Executor.call(@agent, code)
+        outcome = @executor.call(@agent, code, timeout: @timeout)
         return outcome unless outcome.is_a?(Executor::Answer)
 
         @answer = Executor::Answer.new(value: @schema.take(outcome.value))

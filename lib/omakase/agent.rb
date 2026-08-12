@@ -87,11 +87,28 @@ module Omakase
     # How generated code answers: with the value itself.
     def finish(value) = throw(Executor::RESULT, value)
 
+    # Printing from generated code goes to the observation, not to the process's
+    # stdout — and the buffer is per thread, so concurrent agents stay separate.
+    def puts(*args) = omakase_output.puts(*args)
+
+    def print(*args) = omakase_output.print(*args)
+
+    def p(*args)
+      args.each { |arg| omakase_output.puts(arg.inspect) }
+      args.size <= 1 ? args.first : args
+    end
+
+    alias_method :pp, :p
+
     private
+
+    def omakase_output = Thread.current[Executor::OUTPUT] || $stdout
 
     def generate(name, inputs)
       generation = self.class.generations.fetch(name)
       generation.strategy.call(Request.new(agent: self, generation:, inputs:))
+    rescue RubyLLM::Error, RubyLLM::ConfigurationError, RubyLLM::ModelNotFoundError => e
+      raise ProviderError, "#{self.class}##{name}: #{e.message}"
     end
   end
 end

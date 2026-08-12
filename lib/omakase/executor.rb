@@ -2,10 +2,12 @@
 
 module Omakase
   # Runs model-written Ruby in the agent's own context.
-  # ponytail: instance_eval is not a sandbox — run such agents in a container.
+  # ponytail: instance_eval is not a sandbox — see Omakase.executor to swap it.
   module Executor
     SOURCE = "(generated)"
     RESULT = :omakase_result
+    OUTPUT = :omakase_output
+    TIMEOUT = 30
     MAX_OUTPUT = 4_000
 
     # What `finish(value)` handed back: the answer as a Ruby value, not as text.
@@ -13,10 +15,10 @@ module Omakase
 
     module_function
 
-    def call(agent, code)
+    def call(agent, code, timeout: TIMEOUT)
       printed = StringIO.new
       answer = catch(RESULT) do
-        value = capturing(printed) { agent.instance_eval(code, SOURCE, 1) }
+        value = capturing(printed) { Timeout.timeout(timeout) { agent.instance_eval(code, SOURCE, 1) } }
         return observation([printed.string.chomp, "=> #{value.inspect}"])
       end
       Answer.new(value: answer)
@@ -37,13 +39,13 @@ module Omakase
       text.empty? ? "(no output)" : text
     end
 
-    # ponytail: global $stdout swap — fine single-threaded.
+    # Thread-local, so concurrent agents never share a buffer. Agent#puts reads it.
     def capturing(io)
-      previous = $stdout
-      $stdout = io
+      previous = Thread.current[OUTPUT]
+      Thread.current[OUTPUT] = io
       yield
     ensure
-      $stdout = previous
+      Thread.current[OUTPUT] = previous
     end
   end
 end

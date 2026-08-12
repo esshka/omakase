@@ -3,34 +3,7 @@
 require "minitest/autorun"
 require_relative "../lib/omakase"
 
-# Plays the provider: records how each chat was configured and runs the script,
-# which may drive the tool before returning the content.
-class FakeChat
-  Response = Struct.new(:content)
-
-  attr_reader :instructions, :schema, :tools, :tasks
-
-  def initialize(&script)
-    @script = script
-    @instructions = []
-    @tools = []
-    @tasks = []
-  end
-
-  def with_instructions(text) = tap { @instructions << text }
-
-  def with_schema(schema) = tap { @schema = schema }
-
-  def with_tool(tool, **) = tap { @tools << tool }
-
-  def ask(task)
-    @tasks << task
-    Response.new(@script.call(self))
-  end
-
-  # What the model would do with its one tool.
-  def run(code) = tools.fetch(0).call(code:)
-end
+FakeChat = Omakase::FakeChat
 
 class FeedbackAgent < Omakase::Agent
   instructions "You analyze customer feedback."
@@ -206,6 +179,41 @@ class CodeActTest < Minitest::Test
     assert_includes chat.instructions.first, "You check inventory."
     assert_includes chat.instructions.first, "- stock_of(item) — Units of an item on hand"
     refute_includes chat.instructions.first, "total_stock"
+  end
+end
+
+class ReliabilityTest < Minitest::Test
+  def setup = @agent = InventoryAgent.new({"apple" => 3})
+
+  def test_printing_is_per_thread_so_concurrent_agents_stay_separate
+    outputs = 2.times.map do |i|
+      Thread.new { Omakase::Executor.call(@agent, "puts #{i}; nil") }
+    end.map(&:value)
+
+    assert_equal ["0\n=> nil", "1\n=> nil"], outputs
+  end
+
+  def test_generated_code_cannot_run_forever
+    observation = Omakase::Executor.call(@agent, "sleep 5", timeout: 0.05)
+
+    assert_match(/Timeout::Error/, observation)
+  end
+
+  def test_the_executor_is_swappable
+    stub = Object.new
+    def stub.call(_agent, code, timeout:) = Omakase::Executor::Answer.new(value: code.length)
+    tool = Omakase::Tools::Ruby.new(@agent, Omakase::Schema.define(returns: :integer), executor: stub)
+
+    tool.execute(code: "abc")
+
+    assert_equal 3, tool.answer.value
+  end
+
+  def test_provider_failures_arrive_as_one_error_type
+    chat = FakeChat.new { raise RubyLLM::RateLimitError.new(nil, "slow down") }
+
+    error = assert_raises(Omakase::ProviderError) { FeedbackAgent.new(chat:).sentiment_of(text: "x") }
+    assert_match(/FeedbackAgent#sentiment_of/, error.message)
   end
 end
 

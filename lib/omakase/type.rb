@@ -13,7 +13,7 @@ module Omakase
     def take(value)
       return value if value.is_a?(@klass)
 
-      raise Error, "expected #{describe}, got #{value.class}"
+      raise ContractError, "expected #{describe}, got #{value.class}"
     end
 
     def definition

@@ -14,7 +14,7 @@ module Omakase
           .with_schema(request.schema.definition)
 
         request.schema.cast(chat.ask(task).content)
-      rescue Error => e
+      rescue ContractError => e
         # One correction turn, told exactly what was wrong with the last answer.
         request.schema.cast(chat.ask("#{e.message}\n\n#{CORRECTION}").content)
       end

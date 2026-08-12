@@ -2,9 +2,11 @@
 
 # Object-oriented agents: an agent is a Ruby object. Its methods are its tools,
 # and the methods it *declares* but does not implement are written by an LLM.
+require "json"
 require "ruby_llm"
 require "schematist"
 require "stringio"
+require "timeout"
 require "zeitwerk"
 
 loader = Zeitwerk::Loader.for_gem
@@ -12,9 +14,13 @@ loader.setup
 
 module Omakase
   Error = Class.new(StandardError)
+  # The answer did not match the declared return type.
+  ContractError = Class.new(Error)
+  # The model or its provider failed. RubyLLM has already retried what it retries.
+  ProviderError = Class.new(Error)
 
   class << self
-    # Providers, keys, default model, logging — all of it is RubyLLM's.
+    # Providers, keys, default model, timeouts, logging — all of it is RubyLLM's.
     def configure(&) = RubyLLM.configure(&)
 
     # Reads every provider credential RubyLLM knows from the environment:
@@ -34,5 +40,11 @@ module Omakase
         slugs.any? { |slug| option.to_s.start_with?("#{slug}_") }
       end
     end
+
+    # Where generated code runs. Anything answering `call(agent, code, timeout:)`
+    # will do — swap in a subprocess or a container to get real isolation.
+    attr_writer :executor
+
+    def executor = @executor ||= Executor
   end
 end

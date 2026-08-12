@@ -38,20 +38,20 @@ module Omakase
 
     # From the provider's JSON: unwrap first, then hold it to the contract.
     def cast(content)
-      raise Error, "expected JSON matching #{JSON.generate(json)}, got #{content.inspect}" unless content.is_a?(Hash)
+      raise ContractError, "expected JSON matching #{JSON.generate(json)}, got #{content.inspect}" unless content.is_a?(Hash)
 
       data = RubyLLM::Utils.deep_symbolize_keys(content)
-      take(wrapped? ? data.fetch(RESULT) { raise Error, %(missing "result" in #{data.inspect}) } : data)
+      take(wrapped? ? data.fetch(RESULT) { raise ContractError, %(missing "result" in #{data.inspect}) } : data)
     end
 
     # From a Ruby value the generated code computed.
     def take(value)
       return demand(value, properties.fetch("result")["type"]) if wrapped?
-      raise Error, "expected #{describe}, got #{value.inspect}" unless value.is_a?(Hash)
+      raise ContractError, "expected #{describe}, got #{value.inspect}" unless value.is_a?(Hash)
 
       data = RubyLLM::Utils.deep_symbolize_keys(value)
       missing = json.fetch("required").map(&:to_sym) - data.keys
-      raise Error, "missing #{missing.join(", ")} — expected #{describe}" if missing.any?
+      raise ContractError, "missing #{missing.join(", ")} — expected #{describe}" if missing.any?
 
       data
     end
@@ -64,7 +64,7 @@ module Omakase
 
     def demand(value, type)
       matched = type == "boolean" ? [true, false].include?(value) : value.is_a?(RUBY_TYPES.fetch(type))
-      raise Error, "expected <#{type}>, got #{value.inspect}" unless matched
+      raise ContractError, "expected <#{type}>, got #{value.inspect}" unless matched
 
       value
     end
