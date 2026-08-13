@@ -54,7 +54,7 @@ module Omakase
 
       # Without a prompt, the method name is the prompt. A block instead of a
       # string is a prompt read at call time, on the agent.
-      def generates(name, prompt = nil, returns: nil, strategy: nil, &schema)
+      def generates(name, prompt = nil, returns: nil, strategy: nil, model: nil, &schema)
         # Redeclaring an inherited generation is how a subclass specialises one.
         # Landing on a method you wrote is not that, and would replace it unseen.
         if Capabilities.names(self).include?(name) && !generations.key?(name)
@@ -69,7 +69,8 @@ module Omakase
           name:,
           prompt: prompt || humanize(name),
           schema: Schema.define(returns:, &schema),
-          strategy: Strategies.fetch(strategy || self.strategy)
+          strategy: Strategies.fetch(strategy || self.strategy),
+          model:
         )
         define_method(name) { |**inputs| generate(name, inputs) }
         define_singleton_method(name) { |**inputs| new.public_send(name, **inputs) }
@@ -111,7 +112,8 @@ module Omakase
 
     # A fresh conversation per call — two threads calling one agent must not
     # share a mutable chat. What carries between calls is the object's own state.
-    def chat = @chat || RubyLLM.chat(**self.class.chat_options)
+    # Overrides land on top of the class's options; an injected chat ignores them.
+    def chat(**overrides) = @chat || RubyLLM.chat(**self.class.chat_options.merge(overrides))
 
     # That state, as the model should read it: rebuilt on every call, and added
     # to the class's instructions. Override it to remember anything.
@@ -148,7 +150,10 @@ module Omakase
 
     def generate(name, inputs)
       generation = self.class.generations.fetch(name)
-      generation.strategy.call(Request.new(agent: self, generation:, inputs:))
+      Omakase.emit(:generation, agent: self, name:, inputs:)
+      value = generation.strategy.call(Request.new(agent: self, generation:, inputs:))
+      Omakase.emit(:answer, agent: self, name:, value:)
+      value
     rescue RubyLLM::Error, RubyLLM::ConfigurationError, RubyLLM::ModelNotFoundError => e
       raise ProviderError, "#{self.class}##{name}: #{e.message}"
     end

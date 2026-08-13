@@ -256,6 +256,7 @@ class ReliabilityTest < Minitest::Test
     error = assert_raises(Omakase::Error) { Omakase.executor = "not callable" }
 
     assert_equal "executor must answer call, got String", error.message
+    assert_raises(Omakase::Error) { Omakase.listener = 42 }
   ensure
     Omakase.executor = nil
   end
@@ -302,6 +303,41 @@ class DslTest < Minitest::Test
     error = assert_raises(Omakase::Error) { Class.new(Omakase::Agent) { generates :answer, :the_prompt } }
 
     assert_match(/a prompt is a String or a block/, error.message)
+  end
+
+  def test_a_generation_can_name_its_own_model
+    agent_class = Class.new(Omakase::Agent) do
+      strategy :predict
+      generates :quick, "Quick.", model: "small-model"
+    end
+    chat = FakeChat.new { {"result" => "ok"} }
+    agent = agent_class.new
+    overrides = nil
+    agent.define_singleton_method(:chat) { |**options|
+      overrides = options
+      chat
+    }
+
+    assert_equal "ok", agent.quick
+    assert_equal({model: "small-model"}, overrides)
+  end
+
+  def test_the_listener_hears_generations_code_and_answers
+    events = []
+    Omakase.listener = ->(event, **payload) { events << [event, payload] }
+
+    chat = FakeChat.new { {"result" => "positive"} }
+    FeedbackAgent.new(chat:).sentiment_of(text: "love it")
+    tool = Omakase::Tools::Ruby.new(InventoryAgent.new({"apple" => 3}), Omakase::Schema.define(returns: :integer))
+    tool.execute(code: "stock_of('apple')")
+
+    assert_equal %i[generation answer ruby], events.map(&:first)
+    assert_equal :sentiment_of, events[0].last[:name]
+    assert_equal({text: "love it"}, events[0].last[:inputs])
+    assert_equal "positive", events[1].last[:value]
+    assert_equal "=> 3", events[2].last[:outcome]
+  ensure
+    Omakase.listener = nil
   end
 
   def test_generation_methods_are_callable_on_the_class

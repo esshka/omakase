@@ -3,7 +3,7 @@
 module Omakase
   # One invocation of a generation method: all a strategy may depend on.
   Request = Data.define(:agent, :generation, :inputs) do
-    def chat = agent.chat
+    def chat = agent.chat(**{model: generation.model}.compact)
 
     def schema = generation.schema
 

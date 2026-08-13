@@ -60,6 +60,17 @@ module Omakase
 
     def embedder = @embedder ||= ->(text) { RubyLLM.embed(text).vectors }
 
+    # Every step, as it happens: a generation starts, model-written code runs,
+    # an answer lands. Anything answering `call(event, **payload)` will do —
+    # a logger, a tracer, a test. Nil, the default, costs nothing.
+    def listener=(listener)
+      @listener = callable!(listener, "listener")
+    end
+
+    attr_reader :listener
+
+    def emit(event, **payload) = @listener&.call(event, **payload)
+
     private
 
     # Fail where the swap is made, not deep inside a generation.

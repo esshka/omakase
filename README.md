@@ -186,6 +186,13 @@ end
 Naming a provider implies `assume_model_exists: true`; any other RubyLLM chat option passes through.
 Subclasses inherit the setting and can override it, so one `ApplicationAgent` configures the lot.
 
+A generation method can name its own model — a cheap one for classification beside a strong one
+for reasoning. The id lands on top of the class's options, so the provider stays the class's:
+
+```ruby
+generates :classify, "Sort this ticket into a queue.", model: "claude-haiku-4-5"
+```
+
 Credentials come from the environment — one call covers every provider:
 
 ```ruby
@@ -331,6 +338,18 @@ chat = Omakase::FakeChat.new { |fake| fake.run("finish(stock_of(:apple))") }
 ```
 
 It records `instructions`, `schema`, `tools` and `tasks`, so the prompt is assertable too.
+
+### Listening in
+
+One callback hears every step as it happens: a generation starting, model-written code running,
+an answer landing. Wire it to a logger or a tracer; nil, the default, costs nothing.
+
+```ruby
+Omakase.listener = ->(event, **payload) { Rails.logger.info("#{event} #{payload.except(:agent)}") }
+```
+
+`:generation` carries `agent:, name:, inputs:` · `:ruby` carries `agent:, code:, outcome:` ·
+`:answer` carries `agent:, name:, value:`.
 
 ## Rails
 

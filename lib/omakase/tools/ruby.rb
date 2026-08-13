@@ -36,6 +36,7 @@ module Omakase
         return halt("Tool budget spent.") if @calls > @budget + 1
 
         outcome = @executor.call(@agent, code, timeout: @timeout)
+        Omakase.emit(:ruby, agent: @agent, code:, outcome:)
         return outcome if outcome.is_a?(String)
         # The seam's contract, checked here so a wrong executor cannot reach the model.
         raise Error, "executor must return a String or Executor::Answer, got #{outcome.class}" unless outcome.is_a?(Executor::Answer)
