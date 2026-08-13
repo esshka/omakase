@@ -386,7 +386,8 @@ footer a:hover { color: var(--shu); border-color: var(--shu); }
       <p class="note">
         Ordinary methods are what the model can call — there is no tool registry, so adding a tool is
         adding a method. <strong>Declared</strong> methods have no body: the name and prompt are the
-        specification, the block is the contract.
+        specification, the block is the contract. A field is memory: the chat is fresh every call, so
+        what carries is what the object keeps — <code>context</code> puts it in the next prompt.
       </p>
 <pre><code><span class="k">class</span> InventoryAgent <span class="o">&lt;</span> Omakase::Agent
   instructions <span class="s">"You check inventory."</span>

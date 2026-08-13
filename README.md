@@ -150,7 +150,6 @@ end
 The connection opens when the class is defined and the tools are read from the server then, so a
 tool's arguments reach the model as documentation. A failed call raises, which the model sees and
 can correct. Only text comes back: an image or audio result is dropped.
-### Testing
 
 ### Skills
 
@@ -170,6 +169,31 @@ That is the whole of “loaded on demand”: the one-line description is in the 
 reaches the model if the generated code calls `commit_style`. Anything else the skill ships —
 scripts, templates — sits in the same directory, and the body ends with its path, so generated Ruby
 can read or run it.
+
+### Remembering
+
+The chat is fresh on every call — two threads calling one agent must not share a mutable
+conversation. What carries between calls is the object itself: override `context`, and whatever it
+returns is appended to the instructions of the next call.
+
+```ruby
+class InterviewAgent < ApplicationAgent
+  instructions "You interview a Ruby candidate. One question at a time."
+
+  def context = @asked.empty? ? nil : "Questions you already asked:\n- #{@asked.join("\n- ")}"
+
+  generates :question_after, "Ask the next question, on a topic you have not covered yet."
+
+  def ask(answer) = @asked << question_after(answer:)
+end
+```
+
+So “what to keep” is a decision you write in Ruby rather than a policy the library guesses: keep the
+last ten, keep a summary, keep the rows you touched. State is the memory, and it is already typed,
+testable, and yours.
+
+### Testing
+
 `Omakase::Agent.new(chat:)` takes any object that quacks like a `RubyLLM::Chat`, and one ships with
 the library, so agents are tested without a network:
 
@@ -334,6 +358,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`rails_app.rb`](examples/rails_app.rb) | a whole Rails app in one file: initializer, agent, controller |
 | [`mcp_agent.rb`](examples/mcp_agent.rb) | an MCP server's tools as methods on the agent |
 | [`skill_agent.rb`](examples/skill_agent.rb) | a SKILL.md directory the model loads when it needs it |
+| [`interview_agent.rb`](examples/interview_agent.rb) | remembering across calls, without a shared chat |
 
 ```bash
 bundle exec rake                     # tests, no network
@@ -365,8 +390,9 @@ What is not here yet, roughly in the order it would earn its place:
       as JSON. Done: `finish(value)` plus `returns: SomeClass`.
 - [x] **Tracing** — RubyLLM emits `chat.ruby_llm` and `tool_call.ruby_llm`; point `config.instrumenter`
       at `ActiveSupport::Notifications` and subscribe. Done, by not writing it.
-- [ ] **Conversation history** — the chat is fresh per call. Keeping one per agent would let a
-      method continue where the last one left off, at the cost of deciding what to keep.
+- [x] **Conversation history** — the chat stays fresh per call, deliberately: one mutable chat shared
+      by two threads is a bug waiting for production. What carries between calls is the object —
+      `context` renders its state into the next prompt. Done, by keeping less.
 - [ ] **Session storage** — persist that history and the agent state so a run can be resumed.
 - [x] **MCP tools** — external tools over the Model Context Protocol, via `ruby_llm-mcp`. Done:
       `mcp :files, …` puts the server's tools on the agent, and generated code calls them.

@@ -7,7 +7,7 @@ module Omakase
 
     def schema = generation.schema
 
-    def instructions = agent.class.instructions
+    def instructions = [agent.class.instructions, agent.context].reject { |text| text.to_s.empty? }.join("\n\n")
 
     def task
       return generation.prompt if inputs.empty?

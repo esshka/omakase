@@ -367,3 +367,43 @@ class SkillsTest < Minitest::Test
     with_skill { |agent| assert_match(%r{Files for this skill are in .*/ruby-style\.}, agent.new.ruby_style) }
   end
 end
+
+class ContextTest < Minitest::Test
+  # Remembering is the object's job: what happened is state, and state is prompt.
+  class InterviewAgent < Omakase::Agent
+    instructions "You are interviewing a candidate."
+    strategy :predict
+
+    def initialize(**options)
+      super
+      @asked = []
+    end
+
+    def context = @asked.empty? ? nil : "Already asked:\n#{@asked.join("\n")}"
+
+    generates :question_after, "Ask the next question."
+
+    def ask(answer)
+      @asked << question_after(answer:)
+    end
+  end
+
+  def test_nothing_is_added_until_the_agent_has_something_to_remember
+    chat = FakeChat.new { {"result" => "Tell me about yourself."} }
+    agent = InterviewAgent.new(chat:)
+
+    agent.ask("hello")
+
+    refute_includes chat.instructions.first, "Already asked"
+  end
+
+  def test_what_the_agent_kept_is_in_the_instructions_of_the_next_call
+    chat = FakeChat.new { {"result" => "And after that?"} }
+    agent = InterviewAgent.new(chat:)
+
+    2.times { agent.ask("hello") }
+
+    assert_includes chat.instructions.last, "You are interviewing a candidate."
+    assert_includes chat.instructions.last, "Already asked:\nAnd after that?"
+  end
+end

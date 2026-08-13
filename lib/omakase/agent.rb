@@ -88,8 +88,13 @@ module Omakase
       @chat = chat
     end
 
-    # A fresh conversation per call.
+    # A fresh conversation per call — two threads calling one agent must not
+    # share a mutable chat. What carries between calls is the object's own state.
     def chat = @chat || RubyLLM.chat(**self.class.chat_options)
+
+    # That state, as the model should read it: rebuilt on every call, and added
+    # to the class's instructions. Override it to remember anything.
+    def context = nil
 
     # For generated code meeting an object whose type it does not know.
     def doc(object) = puts(Doc.of(object))
