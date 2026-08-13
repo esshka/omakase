@@ -1,12 +1,14 @@
 # frozen_string_literal: true
 
 # ruby examples/memory_agent.rb
-# Needs a provider that serves embeddings — OPENAI_API_KEY, or a local Ollama
-# with an embedding model. RubyLLM's default is text-embedding-3-small.
 require_relative "setup"
 
-# The chat provider and the embedding provider need not be the same one.
-Omakase.configure { |config| config.default_embedding_model = ENV["EMBEDDING_MODEL"] } if ENV["EMBEDDING_MODEL"]
+# The chat provider and the embedding provider are separate choices. OpenRouter
+# serves embeddings but does not list the models, so this one is named on trust.
+Omakase.embedder = lambda do |text|
+  RubyLLM.embed(text, model: ENV.fetch("EMBEDDING_MODEL", "qwen/qwen3-embedding-4b"),
+    provider: :openrouter, assume_model_exists: true).vectors
+end
 
 class SupportAgent < ApplicationAgent
   instructions "You answer customers about this shop, in one sentence."

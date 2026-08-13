@@ -283,8 +283,19 @@ them — `remember("Shipping to Canada takes three weeks")` on the way out, `rec
 on the way in. The store is a field, so what the agent learned marshals with it and is there on the
 next run.
 
-Embeddings come from RubyLLM (`Omakase.embedder` if you want another source — a fake one keeps
-tests offline), and the search is a dot product over unit vectors. That holds for the few hundred
+Embeddings come from RubyLLM, and `Omakase.embedder` is the seam if you want another source — a
+fake one keeps tests offline, and any provider fits through it:
+
+```ruby
+# RubyLLM defaults to an OpenAI embedding model; OpenRouter serves embeddings too,
+# it just does not list them, so the model is named on trust.
+Omakase.embedder = ->(text) do
+  RubyLLM.embed(text, model: "qwen/qwen3-embedding-4b", provider: :openrouter,
+    assume_model_exists: true).vectors
+end
+```
+
+The search is a dot product over unit vectors. That holds for the few hundred
 things one agent learns about its work; past that it is your database's job — pgvector and the
 [`neighbor`](https://github.com/ankane/neighbor) gem — and `Omakase::Memory` is the interface to
 reimplement against it. And for a few dozen facts, `@notes.grep(/shipping/)` beats every word of
