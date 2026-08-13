@@ -192,6 +192,24 @@ So “what to keep” is a decision you write in Ruby rather than a policy the l
 last ten, keep a summary, keep the rows you touched. State is the memory, and it is already typed,
 testable, and yours.
 
+### Resuming
+
+Because the state is the object, persisting a run is persisting the object — nothing to configure:
+
+```ruby
+Redis.current.set("interview:#{id}", Marshal.dump(agent))
+
+agent = Marshal.load(Redis.current.get("interview:#{id}"))
+agent.ask("...")                                  # picks up with everything it kept
+```
+
+The live chat is left out of the dump and rebuilt on the next call, so a resumed agent holds no
+stale connection. In Rails you usually need none of this: the state came from your models, and the
+agent is rebuilt from those rows per request.
+
+A generation in flight is not resumable — the tool loop is RubyLLM's, and a crashed one is retried
+whole, which is what `ActiveJob` does anyway.
+
 ### Testing
 
 `Omakase::Agent.new(chat:)` takes any object that quacks like a `RubyLLM::Chat`, and one ships with
@@ -373,6 +391,8 @@ too. Two rules follow:
 
 - **Untrusted input (anything a user typed) belongs to `:predict`.** No code runs there.
 - **`:code_act` is for work you control** — internal tooling, workers, isolated environments.
+- **A marshalled agent is your data, never user input.** `Marshal.load` on bytes someone else can
+  write is remote code execution, resumed run or not.
 
 What is bounded: ten tool calls per generation, a 30-second timeout per execution, and 4KB of
 observation. What is not: what the code can reach. For real isolation, swap the executor —
@@ -393,7 +413,9 @@ What is not here yet, roughly in the order it would earn its place:
 - [x] **Conversation history** — the chat stays fresh per call, deliberately: one mutable chat shared
       by two threads is a bug waiting for production. What carries between calls is the object —
       `context` renders its state into the next prompt. Done, by keeping less.
-- [ ] **Session storage** — persist that history and the agent state so a run can be resumed.
+- [x] **Session storage** — persist the agent state so a run can be resumed. Done: an agent is an
+      ordinary Ruby object, so `Marshal.dump` is the session; in Rails the state is already in your
+      models. What is *not* here is a checkpoint inside a generation — that loop belongs to RubyLLM.
 - [x] **MCP tools** — external tools over the Model Context Protocol, via `ruby_llm-mcp`. Done:
       `mcp :files, …` puts the server's tools on the agent, and generated code calls them.
 - [x] **Skills** — capabilities as markdown files with front matter, loaded on demand rather than

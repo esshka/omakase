@@ -397,6 +397,13 @@ class ContextTest < Minitest::Test
     refute_includes chat.instructions.first, "Already asked"
   end
 
+  def test_an_agent_marshals_so_a_run_can_be_resumed_without_its_chat
+    resumed = Marshal.load(Marshal.dump(InventoryAgent.new({"apple" => 3}, chat: FakeChat.new { {} })))
+
+    assert_equal 3, resumed.stock_of("apple")
+    refute resumed.instance_variable_defined?(:@chat)
+  end
+
   def test_what_the_agent_kept_is_in_the_instructions_of_the_next_call
     chat = FakeChat.new { {"result" => "And after that?"} }
     agent = InterviewAgent.new(chat:)

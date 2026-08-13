@@ -96,6 +96,12 @@ module Omakase
     # to the class's instructions. Override it to remember anything.
     def context = nil
 
+    # Resuming a run is loading the object back, so an agent marshals like any
+    # other Ruby object — minus the live chat, which is rebuilt on demand.
+    def marshal_dump = (instance_variables - [:@chat]).to_h { |name| [name, instance_variable_get(name)] }
+
+    def marshal_load(state) = state.each { |name, value| instance_variable_set(name, value) }
+
     # For generated code meeting an object whose type it does not know.
     def doc(object) = puts(Doc.of(object))
 
