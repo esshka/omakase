@@ -462,7 +462,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`memory_agent.rb`](examples/memory_agent.rb) | recall by meaning, kept across a marshalled run |
 
 ```bash
-bundle exec rake                     # tests, no network
+bundle exec rake                     # tests and Standard, no network
 ruby examples/inventory_agent.rb
 ```
 

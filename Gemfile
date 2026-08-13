@@ -15,5 +15,6 @@ group :development, :test do
   gem "railties"
   gem "rake"
   gem "ruby_llm-mcp", "~> 1.0"
+  gem "standard"
   gem "sqlite3"
 end

@@ -9,8 +9,15 @@ require_relative "setup"
 ActiveRecord::Base.establish_connection(adapter: "sqlite3", database: ":memory:")
 ActiveRecord::Schema.verbose = false
 ActiveRecord::Schema.define do
-  create_table(:orders) { |t| t.string :email; t.date :placed_on }
-  create_table(:items) { |t| t.belongs_to :order; t.string :name; t.float :price }
+  create_table :orders do |t|
+    t.string :email
+    t.date :placed_on
+  end
+  create_table :items do |t|
+    t.belongs_to :order
+    t.string :name
+    t.float :price
+  end
 end
 
 class Order < ActiveRecord::Base
@@ -24,7 +31,11 @@ end
 
 # keyword_init, so the model cannot transpose the fields silently — a wrong
 # name raises, and it fixes that inside the same loop.
+# standard:disable Style/RedundantStructKeywordInit -- it is not redundant here:
+# without it a plain Struct takes positional arguments, and a model that transposes
+# them would be accepted silently. This way the mistake raises, and it gets fixed in loop.
 Refund = Struct.new(:order_id, :amount, :reason, keyword_init: true)
+# standard:enable Style/RedundantStructKeywordInit
 
 order = Order.create!(email: "ada@example.com", placed_on: Date.today - 9)
 order.items.create!([{name: "Stoneware mug", price: 34.0}, {name: "Shipping", price: 5.9}])

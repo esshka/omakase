@@ -65,7 +65,7 @@ module Omakase
     def properties = json.fetch("properties")
 
     def demand(value, type)
-      matched = type == "boolean" ? [true, false].include?(value) : value.is_a?(RUBY_TYPES.fetch(type))
+      matched = (type == "boolean") ? [true, false].include?(value) : value.is_a?(RUBY_TYPES.fetch(type))
       raise ContractError, "expected <#{type}>, got #{value.inspect}" unless matched
 
       value

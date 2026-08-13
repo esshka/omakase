@@ -8,6 +8,7 @@ module Omakase
     RESULT = :omakase_result
     OUTPUT = :omakase_output
     TIMEOUT = 30
+    TRACE = /\A#{Regexp.escape(SOURCE)}:\d+/
     MAX_OUTPUT = 4_000
 
     # What `finish(value)` handed back: the answer as a Ruby value, not as text.
@@ -28,7 +29,7 @@ module Omakase
 
     # The model can only fix what it can locate, so point at the line.
     def failure(error, code)
-      line = error.backtrace&.grep(/\A#{Regexp.escape(SOURCE)}:\d+/)&.first&.slice(/:(\d+)/, 1)&.to_i
+      line = error.backtrace&.grep(TRACE)&.first&.slice(/:(\d+)/, 1)&.to_i
       source = code.lines[line - 1]&.strip if line&.positive?
       ["#{error.class}: #{error.message}", ("line #{line}: #{source}" if source)].compact.join("\n")
     end

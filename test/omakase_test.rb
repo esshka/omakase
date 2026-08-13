@@ -300,7 +300,7 @@ end
 
 class McpTest < Minitest::Test
   # Stands in for a RubyLLM::MCP client and its tools.
-  Tool = Struct.new(:name, :description, :params_schema, :outcome, keyword_init: true) do
+  Tool = Struct.new(:name, :description, :params_schema, :outcome) do
     def execute(**arguments) = outcome.call(arguments)
   end
 

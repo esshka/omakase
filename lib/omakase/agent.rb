@@ -46,6 +46,7 @@ module Omakase
         describe "Search what you remember, by meaning; the closest few come back"
         define_method(:recall) { |query, limit: 5| (@memory ||= Memory.new).recall(query, limit:) }
       end
+
       # Documents the method defined next — the docstring Ruby does not have.
       def describe(text)
         @pending_description = text
@@ -125,7 +126,7 @@ module Omakase
 
     def p(*args)
       args.each { |arg| omakase_output.puts(arg.inspect) }
-      args.size <= 1 ? args.first : args
+      (args.size <= 1) ? args.first : args
     end
 
     alias_method :pp, :p
