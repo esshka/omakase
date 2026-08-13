@@ -49,5 +49,11 @@ module Omakase
     attr_writer :executor
 
     def executor = @executor ||= Executor
+
+    # How text becomes a vector, for Memory. Anything answering `call(text)`
+    # will do; the model and its provider are RubyLLM's to configure.
+    attr_writer :embedder
+
+    def embedder = @embedder ||= ->(text) { RubyLLM.embed(text).vectors }
   end
 end

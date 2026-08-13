@@ -37,6 +37,15 @@ module Omakase
       # A skill directory — a SKILL.md with YAML front matter. Its description
       # joins the agent's capabilities; its body arrives when the model asks.
       def skill(path) = Skills.attach(self, path)
+
+      # Two more methods: one to save something, one to search it by meaning.
+      # The store is a field, so it marshals with the agent and outlives the run.
+      def memory
+        describe "Save something worth remembering after this run"
+        define_method(:remember) { |text| (@memory ||= Memory.new).remember(text) }
+        describe "Search what you remember, by meaning; the closest few come back"
+        define_method(:recall) { |query, limit: 5| (@memory ||= Memory.new).recall(query, limit:) }
+      end
       # Documents the method defined next — the docstring Ruby does not have.
       def describe(text)
         @pending_description = text

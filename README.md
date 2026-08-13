@@ -210,6 +210,31 @@ agent is rebuilt from those rows per request.
 A generation in flight is not resumable — the tool loop is RubyLLM's, and a crashed one is retried
 whole, which is what `ActiveJob` does anyway.
 
+### Memory
+
+`memory` adds two more methods to the agent — one to save something, one to search it by meaning:
+
+```ruby
+class SupportAgent < ApplicationAgent
+  instructions "You help customers."
+  memory
+
+  generates :answer, "Answer the customer, using what you remember.", returns: :string
+end
+```
+
+They are listed with everything else the agent can do, so generated code decides when to reach for
+them — `remember("Shipping to Canada takes three weeks")` on the way out, `recall("delivery time")`
+on the way in. The store is a field, so what the agent learned marshals with it and is there on the
+next run.
+
+Embeddings come from RubyLLM (`Omakase.embedder` if you want another source — a fake one keeps
+tests offline), and the search is a dot product over unit vectors. That holds for the few hundred
+things one agent learns about its work; past that it is your database's job — pgvector and the
+[`neighbor`](https://github.com/ankane/neighbor) gem — and `Omakase::Memory` is the interface to
+reimplement against it. And for a few dozen facts, `@notes.grep(/shipping/)` beats every word of
+this.
+
 ### Testing
 
 `Omakase::Agent.new(chat:)` takes any object that quacks like a `RubyLLM::Chat`, and one ships with
@@ -359,6 +384,7 @@ generates :plan, strategy: CriticStrategy
     lib/omakase/tools/ruby.rb      that executor, as a RubyLLM tool, with a call budget
     lib/omakase/mcp.rb             an MCP server’s tools, as methods on the agent
     lib/omakase/skills.rb          a SKILL.md directory, as one described method
+    lib/omakase/memory.rb          remember and recall, by meaning
     lib/omakase/fake_chat.rb       the stand-in chat for tests
     lib/omakase/strategies/        code_act, predict
 
@@ -377,6 +403,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`mcp_agent.rb`](examples/mcp_agent.rb) | an MCP server's tools as methods on the agent |
 | [`skill_agent.rb`](examples/skill_agent.rb) | a SKILL.md directory the model loads when it needs it |
 | [`interview_agent.rb`](examples/interview_agent.rb) | remembering across calls, without a shared chat |
+| [`memory_agent.rb`](examples/memory_agent.rb) | recall by meaning, kept across a marshalled run |
 
 ```bash
 bundle exec rake                     # tests, no network
@@ -420,6 +447,7 @@ What is not here yet, roughly in the order it would earn its place:
       `mcp :files, …` puts the server's tools on the agent, and generated code calls them.
 - [x] **Skills** — capabilities as markdown files with front matter, loaded on demand rather than
       all sitting in the system prompt. Done: `skill "path/to/dir"`, one described method.
-- [ ] **Memory** — recall that survives across sessions, backed by vector search.
+- [x] **Memory** — recall that survives across sessions, backed by vector search. Done: `memory`
+      adds `remember` and `recall`, and the store is a field, so it marshals with the agent.
 - [x] **Concurrency** — parallel generation calls. Done: output is buffered per thread instead of
       through `$stdout`, so threads no longer collide.

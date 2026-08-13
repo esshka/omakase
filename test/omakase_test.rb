@@ -414,3 +414,47 @@ class ContextTest < Minitest::Test
     assert_includes chat.instructions.last, "Already asked:\nAnd after that?"
   end
 end
+
+class MemoryTest < Minitest::Test
+  # A fake embedder: one dimension per word, so overlap is similarity.
+  WORDS = %w[shipping refund ruby].freeze
+
+  class SupportAgent < Omakase::Agent
+    instructions "You help customers."
+    memory
+  end
+
+  def setup = Omakase.embedder = ->(text) { WORDS.map { |word| text.downcase.include?(word) ? 1.0 : 0.0 } }
+
+  def teardown = Omakase.embedder = nil
+
+  def test_the_closest_memory_comes_back_not_the_most_recent
+    agent = SupportAgent.new
+    agent.remember("Shipping to Canada takes three weeks")
+    agent.remember("Refunds are processed in five days")
+
+    assert_equal ["Shipping to Canada takes three weeks"], agent.recall("why is my delivery late", limit: 1)
+  end
+
+  def test_remembering_the_same_thing_twice_is_one_memory
+    agent = SupportAgent.new
+    2.times { agent.remember("Refunds are processed in five days") }
+
+    assert_equal 1, agent.recall("refund", limit: 5).size
+  end
+
+  def test_what_it_learned_survives_the_session
+    agent = SupportAgent.new
+    agent.remember("Shipping to Canada takes three weeks")
+
+    resumed = Marshal.load(Marshal.dump(agent))
+
+    assert_equal ["Shipping to Canada takes three weeks"], resumed.recall("delivery", limit: 1)
+  end
+
+  def test_both_methods_are_offered_to_the_model
+    assert_equal ["recall(query, limit:) — Search what you remember, by meaning; the closest few come back",
+      "remember(text) — Save something worth remembering after this run"],
+      Omakase::Capabilities.of(SupportAgent)
+  end
+end
