@@ -1,6 +1,6 @@
 # Omakase
 
-A light agent framework — about 700 lines of library. *Omakase* (お任せ): you name what you want,
+A light agent framework — about 800 lines of library. *Omakase* (お任せ): you name what you want,
 the rest is left to the chef.
 
 **[esshka.github.io/omakase](https://esshka.github.io/omakase/)** · [rubygems](https://rubygems.org/gems/omakase-agents) · [changelog](CHANGELOG.md) ![gem](https://img.shields.io/gem/v/omakase-agents?color=c8452e&label=)
@@ -54,7 +54,7 @@ method; deleting one is deleting a method.
 ## Why this
 
 Against **RubyLLM alone**: the tool loop, the schema plumbing, and the correction turn after a bad
-answer are what these 700 lines are. Everything else — providers, keys, models, streaming, tracing —
+answer are what these 800 lines are. Everything else — providers, keys, models, streaming, tracing —
 is still RubyLLM's, and stays reachable.
 
 Against **a framework with a tool registry**: there is nothing to register and nothing to keep in

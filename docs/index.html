@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#f7f4ee" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#12100e" media="(prefers-color-scheme: dark)">
 <meta property="og:title" content="Omakase — agents as plain Ruby objects">
-<meta property="og:description" content="Declare a method without a body; the model writes it at runtime. ~700 lines on top of RubyLLM.">
+<meta property="og:description" content="Declare a method without a body; the model writes it at runtime. ~800 lines on top of RubyLLM.">
 <meta property="og:url" content="https://esshka.github.io/omakase/">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://esshka.github.io/omakase/og.png">
@@ -354,7 +354,7 @@ footer a:hover { color: var(--shu); border-color: var(--shu); }
 <body>
 
 <header class="wrap">
-  <div class="brandline rise">Ruby · 0.1 · MIT</div>
+  <div class="brandline rise">Ruby · 0.2 · MIT</div>
 
   <div class="hero">
     <div>
@@ -367,7 +367,7 @@ footer a:hover { color: var(--shu); border-color: var(--shu); }
   <p class="tagline rise">You name what you want. The rest is left to the chef.</p>
 
   <p class="sub rise">
-    A light agent framework for Ruby — about 700 lines on top of RubyLLM. An agent is an object:
+    A light agent framework for Ruby — about 800 lines on top of RubyLLM. An agent is an object:
     fields are state, methods are what the model can call, and the methods you declare
     <em>without a body</em> are written by the model at runtime.
   </p>
@@ -443,6 +443,8 @@ RefundAgent.decide(email: <span class="s">"ada@example.com"</span>, complaint: <
 <pre><code>generates <span class="y">:summarize</span>                          <span class="c"># no prompt: the method name is the prompt</span>
 generates <span class="y">:score</span>, returns: <span class="y">:integer</span>          <span class="c"># => 7</span>
 generates <span class="y">:file_ticket</span>, returns: Ticket        <span class="c"># => #&lt;struct Ticket id="A-1"&gt;</span>
+generates <span class="y">:caption</span>, model: <span class="s">"claude-haiku-4-5"</span>   <span class="c"># a cheap model for a cheap job</span>
+generates <span class="y">:translate</span>, -&gt; { <span class="s">"Into #{@language}."</span> } <span class="c"># a prompt read at call time</span>
 
 generates <span class="y">:analyze</span>, <span class="s">"Analyze the feedback."</span> <span class="k">do</span>
   string <span class="y">:sentiment</span>, enum: %w[positive negative neutral mixed]
@@ -537,7 +539,7 @@ Omakase.configure <span class="k">do</span> |config|
         <div>
           <h3>against RubyLLM alone</h3>
           <p>The tool loop, the schema plumbing and the correction turn after an off-contract answer
-          are what these 700 lines are. Providers, keys, models, streaming and tracing stay RubyLLM's,
+          are what these 800 lines are. Providers, keys, models, streaming and tracing stay RubyLLM's,
           and stay reachable.</p>
         </div>
         <div>
@@ -560,7 +562,7 @@ Omakase.configure <span class="k">do</span> |config|
     <div>
       <h2>Install</h2>
       <p class="note">
-        <code>0.1.0</code> — usable, not finished. Ruby 3.2+, and any provider RubyLLM supports: Anthropic,
+        <code>0.2.0</code> — usable, not finished. Ruby 3.2+, and any provider RubyLLM supports: Anthropic,
         OpenAI, Gemini, Bedrock, Ollama, OpenRouter, and the rest.
       </p>
 <pre><code><span class="o">gem install omakase-agents</span>
