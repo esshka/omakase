@@ -415,6 +415,49 @@ ids.map { |id| Thread.new { WarehouseAgent.appraise(item_id: id) } }.map(&:value
 Sharing one agent instance across threads is your business as usual — its state is yours. Do not
 turn on RubyLLM's `tool_concurrency`: that runs generated code against the same agent in parallel.
 
+**Multi-turn, many pods.** Identity is a row, state is your tables, and the agent is a value —
+rebuilt from them for one turn and thrown away. The chat is fresh per call anyway, so nothing
+sticks to a process: any pod serves any turn, and multi-turn is nothing more than `context`
+reading the history back.
+
+```ruby
+class SupportAgent < ApplicationAgent
+  instructions "You are the support desk. Decide from the customer's own data."
+
+  def initialize(conversation, **options)
+    super(**options)
+    @conversation = conversation
+  end
+
+  # the whole of multi-turn: history is context, rebuilt every turn
+  def context
+    @conversation.messages.order(:created_at).last(30)
+      .map { |message| "#{message.role}: #{message.content}" }.join("\n")
+  end
+
+  describe "Refund an order; refuses anything above the paid total"
+  def refund!(order_id, amount)                       # invariants live here, not in the prompt
+    order = @conversation.user.orders.find(order_id)  # scoping is authorization
+    raise ArgumentError, "over paid total" if amount > order.total
+    Refunds.issue!(order, amount)
+  end
+
+  generates :reply, "Answer the customer's last message.", returns: :string
+end
+
+class TurnJob < ApplicationJob
+  def perform(conversation)
+    conversation.with_lock do                         # turns on one conversation stay serial
+      reply = SupportAgent.new(conversation).reply
+      conversation.messages.create!(role: "assistant", content: reply)
+    end
+  end
+end
+```
+
+Marshal-into-a-column is the escape hatch for resuming a run mid-flight, not the default: rows can
+be queried and migrated, blobs cannot.
+
 **Errors.** Everything raised at the boundary is an `Omakase::Error`:
 
 | | |
