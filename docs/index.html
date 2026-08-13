@@ -530,6 +530,32 @@ Omakase.configure <span class="k">do</span> |config|
 
 <section class="wrap">
   <div class="course">
+    <div class="numeral"></div>
+    <div>
+      <h2>Why this</h2>
+      <div class="two">
+        <div>
+          <h3>against RubyLLM alone</h3>
+          <p>The tool loop, the schema plumbing and the correction turn after an off-contract answer
+          are what these 700 lines are. Providers, keys, models, streaming and tracing stay RubyLLM's,
+          and stay reachable.</p>
+        </div>
+        <div>
+          <h3>against a tool registry</h3>
+          <p>Nothing to register, nothing to keep in sync. A tool's description is <code>describe</code>,
+          one line above the method — not a JSON schema that drifts from the code it describes.</p>
+        </div>
+      </div>
+      <p class="note" style="margin-top:1.6rem">
+        Not here, on purpose: a checkpoint inside a generation, a sandbox, multi-agent orchestration,
+        a token stream. The library stops where your stack already has an answer.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="course">
     <div class="numeral">陸<small>serve</small></div>
     <div>
       <h2>Install</h2>
