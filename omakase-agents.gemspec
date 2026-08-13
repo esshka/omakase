@@ -23,10 +23,11 @@ Gem::Specification.new do |spec|
     "homepage_uri" => spec.homepage,
     "source_code_uri" => spec.homepage,
     "bug_tracker_uri" => "#{spec.homepage}/issues",
+    "changelog_uri" => "#{spec.homepage}/blob/main/CHANGELOG.md",
     "rubygems_mfa_required" => "true"
   }
 
-  spec.files = Dir["lib/**/*.rb"] + %w[README.md LICENSE]
+  spec.files = Dir["lib/**/*.rb"] + %w[README.md CHANGELOG.md LICENSE]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "ruby_llm", "~> 1.16"
