@@ -3,6 +3,25 @@
 One entry per released version, written when the gem is pushed. Until `1.0`, a minor version may
 move the API — what breaks is listed first, so an upgrade is a decision rather than a surprise.
 
+## 0.2.0
+
+Nothing breaks. Four additions, each one a keyword or a seam that costs nothing when unused.
+
+### Added
+
+- A prompt can be a block: `generates :translate, -> { "Translate to #{@language}." }`. It is read
+  at call time, on the agent, so one declaration serves an object however it is configured. A prompt
+  that is neither a String nor a block is refused where it is declared. In the capability list a
+  block-prompted method shows its signature alone — `describe` it to say more.
+- `generates :classify, model: "claude-haiku-4-5"` — a generation method can name its own model, a
+  cheap one beside a strong one. The id lands on top of the class's chat options, so the provider
+  stays the class's; an injected `chat:` still wins.
+- `Omakase.listener` — one callback for every step as it happens: `:generation` (`agent:, name:,
+  inputs:`), `:ruby` (`agent:, code:, outcome:`), `:answer` (`agent:, name:, value:`). Anything
+  answering `call(event, **payload)` will do; nil, the default, costs nothing.
+- `with:` is a reserved argument: it is not rendered into the prompt but passed to RubyLLM's
+  `ask(with:)` as attachments — images, audio, PDFs, as paths, URLs or IO. `FakeChat` records them.
+
 ## 0.1.0
 
 First stable release. `0.0.x` was a prerelease and needed `gem install --pre`; this does not.
