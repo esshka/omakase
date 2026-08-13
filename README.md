@@ -42,7 +42,7 @@ Ruby 3.2+.
 gem "omakase-agents"     # the library is `Omakase`
 ```
 
-From the command line the flag is needed — `0.0.1.alpha` is a prerelease, and RubyGems skips those
+From the command line the flag is needed — `0.0.2.alpha` is a prerelease, and RubyGems skips those
 unless asked. Bundler resolves it without one, since no stable version exists yet.
 
 ```bash
