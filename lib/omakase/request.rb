@@ -10,10 +10,17 @@ module Omakase
     def instructions = [agent.class.instructions, agent.context].reject { |text| text.to_s.empty? }.join("\n\n")
 
     def task
-      return generation.prompt if inputs.empty?
+      return prompt if inputs.empty?
 
       arguments = inputs.map { |name, value| "- #{name}: #{value.inspect}" }
-      "#{generation.prompt}\n\nInputs:\n#{arguments.join("\n")}"
+      "#{prompt}\n\nInputs:\n#{arguments.join("\n")}"
+    end
+
+    # A prompt written as a block is read at call time, on the agent — so one
+    # declaration serves an object however it happens to be configured.
+    def prompt
+      text = generation.prompt
+      text.is_a?(Proc) ? agent.instance_exec(&text) : text
     end
   end
 end

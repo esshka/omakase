@@ -283,6 +283,27 @@ class DslTest < Minitest::Test
     assert_equal "Analyze.", FeedbackAgent.generations[:analyze].prompt
   end
 
+  def test_a_block_prompt_is_read_at_call_time_on_the_agent
+    translator = Class.new(FeedbackAgent) do
+      def initialize(language, **options)
+        super(**options)
+        @language = language
+      end
+
+      generates :translate, -> { "Translate to #{@language}." }
+    end
+    chat = FakeChat.new { {"result" => "hola"} }
+
+    assert_equal "hola", translator.new("Spanish", chat:).translate(text: "hi")
+    assert_includes chat.tasks.first, "Translate to Spanish."
+  end
+
+  def test_a_prompt_that_is_neither_a_string_nor_a_block_is_refused
+    error = assert_raises(Omakase::Error) { Class.new(Omakase::Agent) { generates :answer, :the_prompt } }
+
+    assert_match(/a prompt is a String or a block/, error.message)
+  end
+
   def test_generation_methods_are_callable_on_the_class
     agent = Class.new(FeedbackAgent) do
       generates :answer

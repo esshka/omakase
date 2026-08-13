@@ -52,12 +52,17 @@ module Omakase
         @pending_description = text
       end
 
-      # Without a prompt, the method name is the prompt.
+      # Without a prompt, the method name is the prompt. A block instead of a
+      # string is a prompt read at call time, on the agent.
       def generates(name, prompt = nil, returns: nil, strategy: nil, &schema)
         # Redeclaring an inherited generation is how a subclass specialises one.
         # Landing on a method you wrote is not that, and would replace it unseen.
         if Capabilities.names(self).include?(name) && !generations.key?(name)
           raise Error, "#{self}##{name} is already a method — generates would replace it"
+        end
+
+        unless prompt.nil? || prompt.is_a?(String) || prompt.is_a?(Proc)
+          raise Error, "#{self}##{name}: a prompt is a String or a block returning one, got #{prompt.class}"
         end
 
         generations[name] = Generation.new(

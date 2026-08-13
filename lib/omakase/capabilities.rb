@@ -19,7 +19,9 @@ module Omakase
 
     def entry(agent_class, name)
       signature = "#{name}(#{parameters(agent_class.instance_method(name))})"
-      description = agent_class.descriptions[name] || agent_class.generations[name]&.prompt
+      # A prompt written as a block needs an instance to read; `describe` it instead.
+      prompt = agent_class.generations[name]&.prompt
+      description = agent_class.descriptions[name] || (prompt unless prompt.is_a?(Proc))
       description ? "#{signature} — #{description}" : signature
     end
 

@@ -139,6 +139,22 @@ FeedbackAgent.new.analyze(text: "…")
 `describe` above an ordinary method is the docstring Ruby does not have — it is what the model reads
 when it decides what to call.
 
+A prompt given as a block is read at call time, on the agent, so one declaration serves an object
+however it happens to be configured:
+
+```ruby
+class TranslatorAgent < ApplicationAgent
+  def initialize(language, **options)
+    super(**options)
+    @language = language
+  end
+
+  generates :translate, -> { "Translate to #{@language}, naturally and idiomatically." }
+end
+
+TranslatorAgent.new("Spanish").translate(text: "good morning")   # => "buenos días"
+```
+
 ### Return types
 
 The block is a [schematist](https://github.com/crmne/schematist) schema and becomes the provider's
