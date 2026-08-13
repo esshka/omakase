@@ -12,6 +12,9 @@ module Omakase
     }.freeze
 
     def self.define(returns: nil, &block)
+      # Two contracts in one declaration: one of them would be dropped, silently.
+      raise Error, "returns: and a schema block are two different contracts — declare one" if returns && block
+
       return new(Schematist::Schema.create(&block)) if block
       return Type.new(returns) if returns.is_a?(Module)
 

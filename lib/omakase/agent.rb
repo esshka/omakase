@@ -54,6 +54,12 @@ module Omakase
 
       # Without a prompt, the method name is the prompt.
       def generates(name, prompt = nil, returns: nil, strategy: nil, &schema)
+        # Redeclaring an inherited generation is how a subclass specialises one.
+        # Landing on a method you wrote is not that, and would replace it unseen.
+        if Capabilities.names(self).include?(name) && !generations.key?(name)
+          raise Error, "#{self}##{name} is already a method — generates would replace it"
+        end
+
         generations[name] = Generation.new(
           name:,
           prompt: prompt || humanize(name),

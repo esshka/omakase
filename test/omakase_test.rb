@@ -228,6 +228,48 @@ class ReliabilityTest < Minitest::Test
     assert_equal 3, tool.answer.value
   end
 
+  def test_a_declaration_cannot_ask_for_two_contracts
+    error = assert_raises(Omakase::Error) { Omakase::Schema.define(returns: :integer) { string :city } }
+
+    assert_match(/two different contracts/, error.message)
+  end
+
+  def test_a_generation_cannot_silently_replace_a_method_you_wrote
+    error = assert_raises(Omakase::Error) do
+      Class.new(Omakase::Agent) do
+        def total = 42
+        generates :total
+      end
+    end
+
+    assert_match(/already a method/, error.message)
+  end
+
+  def test_a_subclass_may_still_respecialise_an_inherited_generation
+    parent = Class.new(Omakase::Agent) { generates :answer, "the parent prompt" }
+    child = Class.new(parent) { generates :answer, "the child prompt" }
+
+    assert_equal "the child prompt", child.generations[:answer].prompt
+  end
+
+  def test_a_seam_that_cannot_be_called_is_refused_where_it_is_set
+    error = assert_raises(Omakase::Error) { Omakase.executor = "not callable" }
+
+    assert_equal "executor must answer call, got String", error.message
+  ensure
+    Omakase.executor = nil
+  end
+
+  def test_an_executor_that_breaks_its_contract_does_not_reach_the_model
+    stub = Object.new
+    def stub.call(_agent, _code, timeout:) = {not: :an_observation}
+    tool = Omakase::Tools::Ruby.new(@agent, Omakase::Schema.define(returns: :integer), executor: stub)
+
+    error = assert_raises(Omakase::Error) { tool.execute(code: "1") }
+
+    assert_match(/must return a String or Executor::Answer, got Hash/, error.message)
+  end
+
   def test_provider_failures_arrive_as_one_error_type
     chat = FakeChat.new { raise RubyLLM::RateLimitError.new(nil, "slow down") }
 

@@ -36,12 +36,15 @@ module Omakase
         return halt("Tool budget spent.") if @calls > @budget + 1
 
         outcome = @executor.call(@agent, code, timeout: @timeout)
-        return outcome unless outcome.is_a?(Executor::Answer)
+        return outcome if outcome.is_a?(String)
+        # The seam's contract, checked here so a wrong executor cannot reach the model.
+        raise Error, "executor must return a String or Executor::Answer, got #{outcome.class}" unless outcome.is_a?(Executor::Answer)
 
         @answer = Executor::Answer.new(value: @schema.take(outcome.value))
         halt("Answer accepted.")
-      rescue Error => e
+      rescue ContractError => e
         # Off-contract answers are corrected inside the same loop, not by another request.
+        # Anything else — a broken executor, a bad configuration — is not the model's to fix.
         "finish rejected: #{e.message}"
       end
     end

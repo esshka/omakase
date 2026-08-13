@@ -46,14 +46,27 @@ module Omakase
 
     # Where generated code runs. Anything answering `call(agent, code, timeout:)`
     # will do — swap in a subprocess or a container to get real isolation.
-    attr_writer :executor
+    def executor=(executor)
+      @executor = callable!(executor, "executor")
+    end
 
     def executor = @executor ||= Executor
 
     # How text becomes a vector, for Memory. Anything answering `call(text)`
     # will do; the model and its provider are RubyLLM's to configure.
-    attr_writer :embedder
+    def embedder=(embedder)
+      @embedder = callable!(embedder, "embedder")
+    end
 
     def embedder = @embedder ||= ->(text) { RubyLLM.embed(text).vectors }
+
+    private
+
+    # Fail where the swap is made, not deep inside a generation.
+    def callable!(object, name)
+      return object if object.nil? || object.respond_to?(:call)
+
+      raise Error, "#{name} must answer call, got #{object.class}"
+    end
   end
 end
