@@ -8,6 +8,7 @@ require "schematist"
 require "stringio"
 require "timeout"
 require "zeitwerk"
+require "yaml"
 
 loader = Zeitwerk::Loader.for_gem(warn_on_extra_files: false)
 loader.ignore("#{__dir__}/omakase-agents.rb")

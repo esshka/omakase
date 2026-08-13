@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require "tmpdir"
 require_relative "../lib/omakase"
 
 FakeChat = Omakase::FakeChat
@@ -332,5 +333,37 @@ class McpTest < Minitest::Test
     observation = Omakase::Executor.call(agent, %(read_file(path: "nope")))
 
     assert_includes observation, "Omakase::Error: no such file"
+  end
+end
+
+class SkillsTest < Minitest::Test
+  SKILL = <<~MD
+    ---
+    name: ruby-style
+    description: How this codebase writes Ruby. Use before editing any .rb file.
+    ---
+
+    Prefer endless methods for one-liners.
+  MD
+
+  def with_skill
+    Dir.mktmpdir do |root|
+      directory = File.join(root, "ruby-style")
+      Dir.mkdir(directory)
+      File.write(File.join(directory, "SKILL.md"), SKILL)
+      yield Class.new(Omakase::Agent) { skill directory }
+    end
+  end
+
+  def test_the_description_is_a_capability_and_the_body_is_what_the_call_returns
+    with_skill do |agent|
+      assert_equal ["ruby_style() — How this codebase writes Ruby. Use before editing any .rb file."],
+        Omakase::Capabilities.of(agent)
+      assert_includes agent.new.ruby_style, "Prefer endless methods for one-liners."
+    end
+  end
+
+  def test_the_body_says_where_the_skills_own_files_are
+    with_skill { |agent| assert_match(%r{Files for this skill are in .*/ruby-style\.}, agent.new.ruby_style) }
   end
 end

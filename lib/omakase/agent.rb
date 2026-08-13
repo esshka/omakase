@@ -33,6 +33,10 @@ module Omakase
         require "ruby_llm/mcp"
         MCP.attach(self, RubyLLM::MCP.add_client(name: name.to_s, **options))
       end
+
+      # A skill directory — a SKILL.md with YAML front matter. Its description
+      # joins the agent's capabilities; its body arrives when the model asks.
+      def skill(path) = Skills.attach(self, path)
       # Documents the method defined next — the docstring Ruby does not have.
       def describe(text)
         @pending_description = text

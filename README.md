@@ -1,6 +1,6 @@
 # Omakase
 
-A light agent framework — about 600 lines of library. *Omakase* (お任せ): you name what you want,
+A light agent framework — about 700 lines of library. *Omakase* (お任せ): you name what you want,
 the rest is left to the chef.
 
 **[esshka.github.io/omakase](https://esshka.github.io/omakase/)** · [rubygems](https://rubygems.org/gems/omakase-agents) ![gem](https://img.shields.io/gem/v/omakase-agents?include_prereleases&color=c8452e&label=)
@@ -152,6 +152,24 @@ tool's arguments reach the model as documentation. A failed call raises, which t
 can correct. Only text comes back: an image or audio result is dropped.
 ### Testing
 
+### Skills
+
+A skill is a directory with a `SKILL.md` — the same YAML front matter Claude Code and friends use.
+`skill` reads it and defines one method: the front matter's `description` joins the agent's
+capabilities, and the body is what the method returns.
+
+```ruby
+class CommitAgent < ApplicationAgent
+  skill "skills/commit-style"    # description: "How this project writes commit subjects…"
+
+  generates :subject_for, "Write the commit subject for this change.", returns: :string
+end
+```
+
+That is the whole of “loaded on demand”: the one-line description is in the prompt, the body only
+reaches the model if the generated code calls `commit_style`. Anything else the skill ships —
+scripts, templates — sits in the same directory, and the body ends with its path, so generated Ruby
+can read or run it.
 `Omakase::Agent.new(chat:)` takes any object that quacks like a `RubyLLM::Chat`, and one ships with
 the library, so agents are tested without a network:
 
@@ -298,6 +316,7 @@ generates :plan, strategy: CriticStrategy
     lib/omakase/executor.rb        runs generated Ruby against the agent
     lib/omakase/tools/ruby.rb      that executor, as a RubyLLM tool, with a call budget
     lib/omakase/mcp.rb             an MCP server’s tools, as methods on the agent
+    lib/omakase/skills.rb          a SKILL.md directory, as one described method
     lib/omakase/fake_chat.rb       the stand-in chat for tests
     lib/omakase/strategies/        code_act, predict
 
@@ -314,6 +333,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`support_job.rb`](examples/support_job.rb) | generation off the request thread, via ActiveJob |
 | [`rails_app.rb`](examples/rails_app.rb) | a whole Rails app in one file: initializer, agent, controller |
 | [`mcp_agent.rb`](examples/mcp_agent.rb) | an MCP server's tools as methods on the agent |
+| [`skill_agent.rb`](examples/skill_agent.rb) | a SKILL.md directory the model loads when it needs it |
 
 ```bash
 bundle exec rake                     # tests, no network
@@ -350,8 +370,8 @@ What is not here yet, roughly in the order it would earn its place:
 - [ ] **Session storage** — persist that history and the agent state so a run can be resumed.
 - [x] **MCP tools** — external tools over the Model Context Protocol, via `ruby_llm-mcp`. Done:
       `mcp :files, …` puts the server's tools on the agent, and generated code calls them.
-- [ ] **Skills** — capabilities as markdown files with front matter, loaded on demand rather than
-      all sitting in the system prompt.
+- [x] **Skills** — capabilities as markdown files with front matter, loaded on demand rather than
+      all sitting in the system prompt. Done: `skill "path/to/dir"`, one described method.
 - [ ] **Memory** — recall that survives across sessions, backed by vector search.
 - [x] **Concurrency** — parallel generation calls. Done: output is buffered per thread instead of
       through `$stdout`, so threads no longer collide.
