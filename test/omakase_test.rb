@@ -59,6 +59,19 @@ class PredictTest < Minitest::Test
     assert_equal %i[sentiment topics], chat.schema.properties.keys
   end
 
+  def test_with_sends_attachments_instead_of_rendering_them
+    chat = FakeChat.new { {"result" => "a cat"} }
+    agent = Class.new(Omakase::Agent) do
+      strategy :predict
+      generates :caption, "Describe the photo."
+    end.new(chat:)
+
+    assert_equal "a cat", agent.caption(question: "what animal?", with: "photo.jpg")
+    assert_equal ["photo.jpg"], chat.attachments
+    assert_includes chat.tasks.first, %(- question: "what animal?")
+    refute_includes chat.tasks.first, "photo.jpg"
+  end
+
   def test_an_off_contract_answer_gets_one_correction_turn
     replies = ["prose, not JSON", {"result" => "positive"}]
     chat = FakeChat.new { replies.shift }

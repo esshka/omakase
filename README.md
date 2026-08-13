@@ -169,6 +169,20 @@ Both forms are the same mechanism: a schema whose only property is `result` unwr
 A Ruby class works too — `returns: Ticket` — and then the method hands back the object rather than
 data; see [`:code_act`](#strategies) for what that requires.
 
+### Attachments
+
+`with:` is a reserved argument: it is not rendered into the prompt but sent as attachments —
+images, audio, PDFs — exactly as RubyLLM's `ask(with:)` takes them (paths, URLs, IO objects):
+
+```ruby
+class VisionAgent < ApplicationAgent
+  generates :caption, "Describe the photo.", strategy: :predict
+end
+
+VisionAgent.caption(with: "photo.jpg")
+VisionAgent.caption(question: "what breed?", with: ["a.png", "b.png"])
+```
+
 ### Models and providers
 
 Any provider RubyLLM supports — Anthropic, OpenAI, Gemini, Bedrock, Azure, Mistral, DeepSeek, xAI,
@@ -445,6 +459,12 @@ back with the line that raised, `doc(object)` prints what an object of an unfami
 an answer that misses the contract is rejected into the same loop — the model corrects itself without
 another request. Nothing in the provider bounds a tool loop, so the tool does: ten calls, then a turn
 to answer with what it has.
+
+Generation methods are public methods like any other, so generated code can call them — a
+`:code_act` loop handing a classification to a `:predict` method, or an agent calling another agent
+it holds in a field. And because the code runs on the object, the model can leave state for
+`context` to read on the next call, or define itself a helper method — self-extension is just
+`instance_eval`.
 
 Because the answer is computed rather than retyped, the return type can be a Ruby class and the
 method hands back the object itself:

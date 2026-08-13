@@ -9,11 +9,16 @@ module Omakase
 
     def instructions = [agent.class.instructions, agent.context].reject { |text| text.to_s.empty? }.join("\n\n")
 
-    def task
-      return prompt if inputs.empty?
+    # `with:` is reserved: files for the model to look at, passed through to
+    # RubyLLM's `ask(with:)` as attachments rather than rendered into the text.
+    def attachments = inputs[:with]
 
-      arguments = inputs.map { |name, value| "- #{name}: #{value.inspect}" }
-      "#{prompt}\n\nInputs:\n#{arguments.join("\n")}"
+    def task
+      arguments = inputs.except(:with)
+      return prompt if arguments.empty?
+
+      lines = arguments.map { |name, value| "- #{name}: #{value.inspect}" }
+      "#{prompt}\n\nInputs:\n#{lines.join("\n")}"
     end
 
     # A prompt written as a block is read at call time, on the agent — so one

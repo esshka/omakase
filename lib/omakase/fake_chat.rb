@@ -12,13 +12,14 @@ module Omakase
   class FakeChat
     Response = Struct.new(:content)
 
-    attr_reader :instructions, :schema, :tools, :tasks
+    attr_reader :instructions, :schema, :tools, :tasks, :attachments
 
     def initialize(&script)
       @script = script
       @instructions = []
       @tools = []
       @tasks = []
+      @attachments = []
     end
 
     def with_instructions(text) = tap { @instructions << text }
@@ -27,8 +28,9 @@ module Omakase
 
     def with_tool(tool, **) = tap { @tools << tool }
 
-    def ask(task)
+    def ask(task, with: nil)
       @tasks << task
+      @attachments << with if with
       Response.new(@script.call(self))
     end
 

@@ -12,7 +12,7 @@ module Omakase
         notes = request.chat
           .with_instructions(instructions(request))
           .with_tool(tool)
-          .ask(request.task)
+          .ask(request.task, with: request.attachments)
           .content
 
         return tool.answer.value if tool.answer
