@@ -3,7 +3,7 @@
 A light agent framework — about 700 lines of library. *Omakase* (お任せ): you name what you want,
 the rest is left to the chef.
 
-**[esshka.github.io/omakase](https://esshka.github.io/omakase/)** · [rubygems](https://rubygems.org/gems/omakase-agents) ![gem](https://img.shields.io/gem/v/omakase-agents?include_prereleases&color=c8452e&label=)
+**[esshka.github.io/omakase](https://esshka.github.io/omakase/)** · [rubygems](https://rubygems.org/gems/omakase-agents) ![gem](https://img.shields.io/gem/v/omakase-agents?color=c8452e&label=)
 
 The whole philosophy: **an agent is an object**. Its fields are state, its methods are what the
 model can call, and the methods it *declares without a body* are written by the model at runtime —
@@ -75,11 +75,8 @@ Ruby 3.2+.
 gem "omakase-agents"     # the library is `Omakase`
 ```
 
-From the command line the flag is needed — `0.0.2.alpha` is a prerelease, and RubyGems skips those
-unless asked. Bundler resolves it without one, since no stable version exists yet.
-
 ```bash
-gem install omakase-agents --pre
+gem install omakase-agents
 ```
 
 ## Usage
@@ -499,4 +496,5 @@ Omakase.executor = MySubprocessExecutor    # returns an observation String or Ex
   call. There is nothing to add.
 - **Streaming.** A generation method returns a value, not tokens. RubyLLM streams if you need that.
 
-`0.1.0` lands when the API stops moving. Until then the version is a prerelease and means it.
+`1.0` lands when the API stops moving. Until then a minor version may move it, and `0.1.0` means
+the library is usable, not that it is finished.
