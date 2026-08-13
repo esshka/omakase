@@ -290,6 +290,18 @@ class ReliabilityTest < Minitest::Test
     error = assert_raises(Omakase::ProviderError) { FeedbackAgent.new(chat:).sentiment_of(text: "x") }
     assert_match(/FeedbackAgent#sentiment_of/, error.message)
   end
+
+  # FakeChat stands in for RubyLLM::Chat in every test here, so it is the one thing
+  # a green suite cannot vouch for: if the real chat moves, nothing else would notice.
+  def test_the_fake_chat_still_stands_in_for_the_real_one
+    fake = Omakase::FakeChat.instance_methods(false)
+
+    %i[with_instructions with_schema with_tool ask].each do |name|
+      assert_includes fake, name
+      assert RubyLLM::Chat.method_defined?(name), "RubyLLM::Chat##{name} is gone"
+    end
+    assert_includes RubyLLM::Chat.instance_method(:ask).parameters, [:key, :with]
+  end
 end
 
 class DslTest < Minitest::Test

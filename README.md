@@ -243,6 +243,10 @@ The connection opens when the class is defined and the tools are read from the s
 tool's arguments reach the model as documentation. A failed call raises, which the model sees and
 can correct. Only text comes back: an image or audio result is dropped.
 
+That it happens at class-definition time has a cost worth knowing: under `config.eager_load = true`
+an unreachable server fails the boot, and every reload in development reconnects. If a deploy must
+not wait on a sidecar, keep MCP agents out of the eager-loaded paths.
+
 ### Skills
 
 A skill is a directory with a `SKILL.md` — the same YAML front matter Claude Code and friends use.
@@ -256,6 +260,10 @@ class CommitAgent < ApplicationAgent
   generates :subject_for, "Write the commit subject for this change.", returns: :string
 end
 ```
+
+The path is expanded against the working directory, which is `Rails.root` until something — a job
+runner, a systemd unit — decides otherwise, so `Rails.root.join("app/agents/skills/commit_style")`
+is the spelling that keeps working.
 
 That is the whole of “loaded on demand”: the one-line description is in the prompt, the body only
 reaches the model if the generated code calls `commit_style`. Anything else the skill ships —
@@ -365,6 +373,13 @@ Omakase.listener = ->(event, **payload) { Rails.logger.info("#{event} #{payload.
 `:generation` carries `agent:, name:, inputs:` · `:ruby` carries `agent:, code:, outcome:` ·
 `:answer` carries `agent:, name:, value:`.
 
+In Rails there is already a bus for this, and one line puts the events on it — subscribers and your
+APM pick them up with nothing further:
+
+```ruby
+Omakase.listener = ->(event, **payload) { ActiveSupport::Notifications.instrument("#{event}.omakase", payload) }
+```
+
 ## Rails
 
 Agents live in `app/agents` — Rails autoloads it, and reloading is safe because everything a
@@ -406,14 +421,21 @@ is the runnable version, three tickets triaged concurrently by the async adapter
 
 **Threads.** Puma is multi-threaded and so is this: printing from generated code goes to a
 per-thread buffer, and each call gets its own chat and its own agent instance. Concurrent calls are
-just threads:
+threads — wrapped in the Rails executor, which is what returns the connection to the pool and makes
+autoloading safe off the request thread:
 
 ```ruby
-ids.map { |id| Thread.new { WarehouseAgent.appraise(item_id: id) } }.map(&:value)
+ids.map do |id|
+  Thread.new { Rails.application.executor.wrap { WarehouseAgent.appraise(item_id: id) } }
+end.map(&:value)
 ```
 
 Sharing one agent instance across threads is your business as usual — its state is yours. Do not
 turn on RubyLLM's `tool_concurrency`: that runs generated code against the same agent in parallel.
+
+**The pool.** A generation holds its thread for the whole run, and the moment generated code touches
+`ActiveRecord` it holds a database connection with it — through every provider round-trip of a
+`:code_act` loop, not just the queries. Size `pool:` by concurrent agent runs, not by request rate.
 
 **Multi-turn, many pods.** Identity is a row, state is your tables, and the agent is a value —
 rebuilt from them for one turn and thrown away. The chat is fresh per call anyway, so nothing
@@ -446,14 +468,19 @@ class SupportAgent < ApplicationAgent
 end
 
 class TurnJob < ApplicationJob
+  limits_concurrency key: ->(conversation) { conversation }   # one turn per conversation at a time
+
   def perform(conversation)
-    conversation.with_lock do                         # turns on one conversation stay serial
-      reply = SupportAgent.new(conversation).reply
-      conversation.messages.create!(role: "assistant", content: reply)
-    end
+    reply = SupportAgent.new(conversation).reply              # no transaction open across this
+    conversation.messages.create!(role: "assistant", content: reply)
   end
 end
 ```
+
+`limits_concurrency` is Solid Queue's; Sidekiq and GoodJob have their own. What matters is that the
+lock lives in the queue: `with_lock` around a generation would hold a transaction open for the whole
+provider round-trip — a pinned connection, a long-running transaction, and every other turn on that
+row waiting behind it.
 
 Marshal-into-a-column is the escape hatch for resuming a run mid-flight, not the default: rows can
 be queried and migrated, blobs cannot.
@@ -587,8 +614,10 @@ too. Two rules follow:
   write is remote code execution, resumed run or not.
 
 What is bounded: ten tool calls per generation, a 30-second timeout per execution, and 4KB of
-observation. What is not: what the code can reach. For real isolation, swap the executor —
-anything answering `call(agent, code, timeout:)` will do:
+observation. That timeout is Ruby's `Timeout`, which raises wherever the code has got to — inside a
+database driver it can leave the connection unusable — one more reason anything long-running belongs
+in an executor of your own. What is not bounded: what the code can reach. For real isolation, swap
+the executor — anything answering `call(agent, code, timeout:)` will do:
 
 ```ruby
 Omakase.executor = MySubprocessExecutor    # returns an observation String or Executor::Answer
