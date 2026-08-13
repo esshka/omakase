@@ -123,6 +123,17 @@ class CodeActTest < Minitest::Test
     refute_includes observation, "each_with_object"
   end
 
+  def test_a_record_reads_as_its_own_methods_and_the_values_it_holds
+    record = Class.new do
+      def self.to_s = "Order"
+      def attributes = {"id" => 1, "email" => "ada@example.com"}
+      def total = 39.9
+    end.new
+
+    assert_equal ["Order", "  attributes()", "  total()", %(  id = 1), %(  email = "ada@example.com")].join("\n"),
+      Omakase::Doc.of(record)
+  end
+
   def test_finish_answers_in_one_turn_with_the_computed_value
     chat = FakeChat.new do |fake|
       fake.run("finish(stock_of(:apple) + stock_of(:pear))")
@@ -156,6 +167,13 @@ class CodeActTest < Minitest::Test
 
     assert_instance_of Ticket, ticket
     assert_equal "A-1", ticket.id
+  end
+
+  def test_a_class_return_type_that_is_never_finished_fails_loudly
+    chat = FakeChat.new { "I have decided, but I will not call finish." }
+
+    error = assert_raises(Omakase::ContractError) { TicketAgent.new(chat:).file(message: "cracked") }
+    assert_equal "file: the model never called finish(Ticket.new(id:, severity:))", error.message
   end
 
   def test_the_instructions_name_the_shape_finish_must_take

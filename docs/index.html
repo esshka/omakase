@@ -11,7 +11,11 @@
 <meta property="og:description" content="Declare a method without a body; the model writes it at runtime. ~700 lines on top of RubyLLM.">
 <meta property="og:url" content="https://esshka.github.io/omakase/">
 <meta property="og:type" content="website">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="https://esshka.github.io/omakase/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://esshka.github.io/omakase/og.png">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23c8452e'/><text x='16' y='24' font-size='22' text-anchor='middle' fill='%23f7f4ee' font-family='serif'>任</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -389,24 +393,20 @@ footer a:hover { color: var(--shu); border-color: var(--shu); }
         specification, the block is the contract. A field is memory: the chat is fresh every call, so
         what carries is what the object keeps — <code>context</code> puts it in the next prompt.
       </p>
-<pre><code><span class="k">class</span> InventoryAgent <span class="o">&lt;</span> Omakase::Agent
-  instructions <span class="s">"You check inventory."</span>
+<pre><code><span class="k">class</span> RefundAgent <span class="o">&lt;</span> Omakase::Agent
+  instructions <span class="s">"You are the refund desk of an online shop."</span>
 
-  describe <span class="s">"Units of an item on hand"</span>
-  <span class="k">def</span> stock_of(item) = STOCK.dig(item, <span class="y">:stock</span>) || <span class="y">0</span>
+  describe <span class="s">"Every order this customer placed, newest first. An Order has items and total"</span>
+  <span class="k">def</span> orders_for(email) = Order.where(email:).order(placed_on: <span class="y">:desc</span>)
 
-  describe <span class="s">"Unit price of an item"</span>
-  <span class="k">def</span> price_of(item) = STOCK.dig(item, <span class="y">:price</span>) || <span class="y">0.0</span>
+  describe <span class="s">"What the policy says about a topic, such as :damage or :late"</span>
+  <span class="k">def</span> policy_on(topic) = POLICY.fetch(topic, <span class="s">"Refunds are allowed within 30 days."</span>)
 
-  generates <span class="y">:can_fulfill_order</span>, <span class="s">"Does the order fit the budget?"</span> <span class="k">do</span>
-    boolean <span class="y">:can_fulfill</span>
-    number  <span class="y">:total_cost</span>
-    array   <span class="y">:unavailable</span>, of: <span class="y">:string</span>
-  <span class="k">end</span>
+  generates <span class="y">:decide</span>, <span class="s">"Decide this refund, and name the policy you applied."</span>, returns: Refund
 <span class="k">end</span>
 
-InventoryAgent.can_fulfill_order(items: %w[apple banana orange], budget: <span class="y">5.0</span>)
-<span class="c"># => {can_fulfill: false, total_cost: 2.05, unavailable: ["orange"]}</span></code></pre>
+RefundAgent.decide(email: <span class="s">"ada@example.com"</span>, complaint: <span class="s">"the mug arrived cracked"</span>)
+<span class="c"># =&gt; #&lt;struct Refund order_id=1, amount=39.9, reason="Damaged goods are refunded in full…"&gt;</span></code></pre>
     </div>
   </div>
 </section>
@@ -421,7 +421,7 @@ InventoryAgent.can_fulfill_order(items: %w[apple banana orange], budget: <span c
         state <em>are</em> the API; what the code printed and returned comes back as the observation.
         It answers with <code>finish(value)</code> — computed, not retyped.
       </p>
-<pre><div class="turn"><span class="who">ruby</span><span><span class="o">items.map { |i| [i, stock_of(i), price_of(i)] }</span></span></div><div class="turn"><span class="who obs">out</span><span class="o">=&gt; [["apple", 50, 0.75], ["banana", 30, 0.5], ["orange", 0, 0.8]]</span></div><div class="turn"><span class="who">ruby</span><span><span class="o">finish(can_fulfill: <span class="y">false</span>, total_cost: <span class="y">2.05</span>, unavailable: [<span class="s">"orange"</span>])</span></span></div><div class="turn"><span class="who obs">out</span><span class="o">answer accepted</span></div></pre>
+<pre><div class="turn"><span class="who">ruby</span><span><span class="o">orders_for(<span class="s">"ada@example.com"</span>).each { |o| puts o.total, o.items.inspect }</span></span></div><div class="turn"><span class="who obs">out</span><span class="o">39.9<br>[#&lt;Item name: "Stoneware mug", price: 34.0&gt;, #&lt;Item name: "Shipping", price: 5.9&gt;]</span></div><div class="turn"><span class="who">ruby</span><span><span class="o">puts policy_on(<span class="y">:damage</span>)</span></span></div><div class="turn"><span class="who obs">out</span><span class="o">Damaged goods are refunded in full, including shipping, within 90 days.</span></div><div class="turn"><span class="who">ruby</span><span><span class="o">finish(Refund.new(order_id: <span class="y">1</span>, amount: <span class="y">39.9</span>, reason: <span class="s">"…"</span>))</span></span></div><div class="turn"><span class="who obs">out</span><span class="o">answer accepted</span></div></pre>
       <p class="note" style="margin-top:1.4rem">
         A failure comes back with the line that raised. An answer off contract is rejected into the same
         loop. Ten tool calls and thirty seconds per execution, then it answers with what it has.

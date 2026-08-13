@@ -29,6 +29,8 @@ module Omakase
 
     def json = @json ||= definition.new.to_json_schema
 
+    def code_only? = false
+
     # The shape, in the shorthand the model writes back: `{city: <string>}`.
     def describe
       return "<#{properties.fetch("result")["type"]}>" if wrapped?

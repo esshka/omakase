@@ -10,25 +10,42 @@ model can call, and the methods it *declares without a body* are written by the 
 the method name and prompt are the specification, the schema is the contract.
 
 ```ruby
-class InventoryAgent < ApplicationAgent
-  instructions "You check inventory."
+class RefundAgent < ApplicationAgent
+  instructions "You are the refund desk of an online shop. Decide from the customer’s own orders."
 
-  describe "Units of an item on hand"
-  def stock_of(item) = STOCK.dig(item, :stock) || 0
+  describe "Every order this customer placed, newest first. An Order has placed_on, items and total"
+  def orders_for(email) = Order.where(email:).order(placed_on: :desc)
 
-  describe "Unit price of an item"
-  def price_of(item) = STOCK.dig(item, :price) || 0.0
+  describe "What the policy says about a topic, such as :damage or :late"
+  def policy_on(topic) = POLICY.fetch(topic, "Refunds are allowed within 30 days.")
 
-  generates :can_fulfill_order, "Decide whether the order fits the budget and is in stock." do
-    boolean :can_fulfill
-    number :total_cost
-    array :unavailable, of: :string
-  end
+  generates :decide, "Decide this refund, and name the policy you applied.", returns: Refund
 end
 
-InventoryAgent.can_fulfill_order(items: %w[apple banana orange], budget: 5.0)
-# => {can_fulfill: false, total_cost: 2.05, unavailable: ["orange"]}
+RefundAgent.decide(email: "ada@example.com", complaint: "the mug arrived cracked")
+# => #<struct Refund order_id=1, amount=39.9,
+#      reason="Mug arrived cracked; damaged goods refunded in full including shipping per policy :damage">
 ```
+
+`Order` is your ActiveRecord model and `Refund` is your Struct. Nothing was registered anywhere, and
+nothing came back as JSON to parse — the model wrote Ruby against your objects and handed one back.
+Here is the run above, abridged:
+
+```
+ruby   orders = orders_for("ada@example.com")
+       orders.each { |o| puts "total: #{o.total}", "items: #{o.items.inspect}" }
+out    total: 39.9
+       items: [#<Item id: 1, name: "Stoneware mug", price: 34.0>, #<Item id: 2, name: "Shipping", price: 5.9>]
+ruby   puts policy_on(:damage)
+out    Damaged goods are refunded in full, including shipping, within 90 days.
+ruby   finish(Refund.new(order_id: 1, amount: 39.9, reason: "Mug arrived cracked; damaged goods …"))
+out    Answer accepted.
+```
+
+That transcript is real, and it is from `meta/muse-glimmer-30b` on OpenRouter — `:code_act` is developed
+and tested against a 30B model, because a strategy that only works on a frontier model is a demo, not
+a library. [`examples/refund_agent.rb`](examples/refund_agent.rb) is the whole thing, runnable, with
+an in-memory SQLite database.
 
 There is no tool abstraction to keep in sync: the model writes Ruby that runs on the agent object,
 reads what it printed and returned, and answers in the declared schema. Adding a tool is adding a
@@ -437,6 +454,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | --- | --- |
 | [`feedback_agent.rb`](examples/feedback_agent.rb) | structured output in one call |
 | [`inventory_agent.rb`](examples/inventory_agent.rb) | the agent's methods as the model's tools |
+| [`refund_agent.rb`](examples/refund_agent.rb) | ActiveRecord objects in, a Ruby object out |
 | [`warehouse_agent.rb`](examples/warehouse_agent.rb) | inspecting objects whose types are unknown |
 | [`support_agent.rb`](examples/support_agent.rb) | plain Ruby orchestrating generated methods |
 | [`support_job.rb`](examples/support_job.rb) | generation off the request thread, via ActiveJob |

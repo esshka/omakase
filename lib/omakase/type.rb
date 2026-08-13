@@ -8,7 +8,16 @@ module Omakase
       @klass = klass
     end
 
-    def describe = "a #{@klass}"
+    # A Struct or Data says what it holds, and the model needs that to build one:
+    # `Refund.new(order_id:, amount:, reason:)` beats `a Refund`.
+    def describe
+      return "a #{@klass}" unless @klass.respond_to?(:members)
+
+      "#{@klass}.new(#{@klass.members.map { |name| "#{name}:" }.join(", ")})"
+    end
+
+    # Only code can build it, so :predict is not a fallback.
+    def code_only? = true
 
     def take(value)
       return value if value.is_a?(@klass)

@@ -17,8 +17,11 @@ module Omakase
 
         return tool.answer.value if tool.answer
 
-        # It never called finish: fall back to a tool-free turn under the schema.
-        Predict.call(request, task: "#{request.task}\n\nWork done:\n#{notes}")
+        # It never called finish. A JSON answer can still be given in a tool-free turn.
+        return Predict.call(request, task: "#{request.task}\n\nWork done:\n#{notes}") unless request.schema.code_only?
+
+        # An object cannot come back as JSON, so there is nowhere to fall back to.
+        raise ContractError, "#{request.generation.name}: the model never called finish(#{request.schema.describe})"
       end
 
       def instructions(request)

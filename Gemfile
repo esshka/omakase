@@ -9,9 +9,11 @@ gem "zeitwerk", "~> 2.7"
 group :development, :test do
   gem "actionpack"
   gem "activejob"
+  gem "activerecord"
   gem "dotenv"
   gem "minitest"
   gem "railties"
   gem "rake"
   gem "ruby_llm-mcp", "~> 1.0"
+  gem "sqlite3"
 end
