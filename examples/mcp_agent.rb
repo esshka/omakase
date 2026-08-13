@@ -12,10 +12,10 @@ class DocsAgent < ApplicationAgent
     transport_type: :stdio,
     config: {command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", File.expand_path("..", __dir__)]}
 
-  generates :dependencies,
-    "Read #{File.expand_path("../omakase-agents.gemspec", __dir__)} and list the gems it adds as runtime dependencies." do
-    array :gems, of: :string
-  end
+  describe "The absolute path of the project"
+  def root = File.expand_path("..", __dir__)
+
+  generates :summarize, "Read the project's README and say in one sentence what it is.", returns: :string
 end
 
-pp DocsAgent.dependencies
+puts DocsAgent.summarize

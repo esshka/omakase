@@ -8,8 +8,13 @@ module Omakase
 
     def attach(agent_class, client)
       client.tools.each do |tool|
+        name = method_name(tool)
+        # A remote tool list must not quietly shadow a capability the agent already has.
+        raise Error, "#{agent_class} already has ##{name}" if Capabilities.names(agent_class).include?(name)
+
         agent_class.describe(description(tool))
-        agent_class.define_method(method_name(tool)) { |**arguments| MCP.result(tool.execute(**arguments)) }
+        # nil is how a model leaves an argument out; MCP servers reject it.
+        agent_class.define_method(name) { |**arguments| MCP.result(tool.execute(**arguments.compact)) }
       end
       client
     end

@@ -313,6 +313,19 @@ class McpTest < Minitest::Test
     assert_equal "read_file(**arguments) — Read a file from disk. Arguments — path: string (required)", entry
   end
 
+  def test_a_tool_that_shadows_an_existing_capability_is_refused
+    agent = Class.new(Omakase::Agent) { def read_file(path) = File.read(path) }
+
+    error = assert_raises(Omakase::Error) { Omakase::MCP.attach(agent, client(tool)) }
+    assert_match(/already has #read_file/, error.message)
+  end
+
+  def test_arguments_the_model_left_out_are_not_sent
+    agent = agent_with(tool(outcome: ->(arguments) { arguments.keys.inspect })).new
+
+    assert_equal "[:path]", agent.read_file(path: "/tmp/a.txt", limit: nil)
+  end
+
   def test_a_failed_call_raises_where_the_model_can_see_it
     agent = agent_with(tool(outcome: ->(_) { {error: "no such file"} })).new
 
