@@ -469,8 +469,9 @@ generates <span class="y">:analyze</span>, <span class="s">"Analyze the feedback
       <h2>The outside is a method too</h2>
       <p class="note">
         An MCP server's tools arrive as methods on the agent. A skill — a <code>SKILL.md</code> directory,
-        the same front matter Claude Code uses — arrives as one more. Nothing new to learn: external
-        services and curated guidance join the same list of capabilities your own methods are on.
+        the same front matter Claude Code uses — arrives as one more, and <code>memory</code> adds two:
+        <code>remember</code> and <code>recall</code>, by meaning. Nothing new to learn: external services,
+        curated guidance and what the agent picked up join the list your own methods are on.
       </p>
 <pre><code><span class="k">class</span> DocsAgent <span class="o">&lt;</span> Omakase::Agent
   mcp <span class="y">:files</span>,
@@ -478,6 +479,7 @@ generates <span class="y">:analyze</span>, <span class="s">"Analyze the feedback
     config: {command: <span class="s">"npx"</span>, args: [<span class="s">"-y"</span>, <span class="s">"@modelcontextprotocol/server-filesystem"</span>, Rails.root.to_s]}
 
   skill <span class="s">"skills/commit-style"</span>
+  memory
 
   generates <span class="y">:subject_for</span>, <span class="s">"Write the commit subject for this change."</span>, returns: <span class="y">:string</span>
 <span class="k">end</span></code></pre>

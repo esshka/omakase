@@ -34,6 +34,22 @@ There is no tool abstraction to keep in sync: the model writes Ruby that runs on
 reads what it printed and returned, and answers in the declared schema. Adding a tool is adding a
 method; deleting one is deleting a method.
 
+## Why this
+
+Against **RubyLLM alone**: the tool loop, the schema plumbing, and the correction turn after a bad
+answer are what these 700 lines are. Everything else — providers, keys, models, streaming, tracing —
+is still RubyLLM's, and stays reachable.
+
+Against **a framework with a tool registry**: there is nothing to register and nothing to keep in
+sync. The model gets one tool, `ruby`, and reaches the rest through the object. A tool's description
+is `describe`, a line above the method, instead of a JSON schema that drifts from the code it
+describes. The answer comes back as the object the code built, not as JSON you parse again.
+
+Reach for something else when the input is untrusted and you want code execution (see
+[Safety](#safety)), when a run is hundreds of steps and must resume mid-flight, when memory means a
+large corpus rather than what one agent learned, or when you want a token stream rather than a
+value.
+
 ## Installation
 
 Ruby 3.2+.
@@ -50,6 +66,31 @@ gem install omakase-agents --pre
 ```
 
 ## Usage
+
+The whole API, in one class:
+
+```ruby
+class MyAgent < Omakase::Agent
+  model "claude-sonnet-4-5"                      # any RubyLLM model and chat option
+  instructions "Who the agent is."               # the system prompt
+  strategy :code_act                             # or :predict, or anything answering call(request)
+
+  mcp :files, transport_type: :stdio, config: {} # an MCP server's tools, as methods
+  skill "skills/commit-style"                    # a SKILL.md directory, as one described method
+  memory                                         # remember(text) and recall(query)
+
+  describe "Units of an item on hand"            # the docstring Ruby does not have
+  def stock_of(item) = ...                       # any method of yours is a tool
+
+  generates :answer, "What to produce.", returns: :string   # written by the model at runtime
+
+  def context = "..."                            # live state, folded into every prompt
+end
+```
+
+Inside generated code the agent also answers `finish(value)` to return, `doc(object)` to inspect an
+unfamiliar type, and `puts` to say something the model will read back. Outside it, `Marshal.dump`
+is the session.
 
 ### Declaring an agent
 
@@ -429,25 +470,15 @@ anything answering `call(agent, code, timeout:)` will do:
 Omakase.executor = MySubprocessExecutor    # returns an observation String or Executor::Answer
 ```
 
-## Roadmap
+## Not here, on purpose
 
-What is not here yet, roughly in the order it would earn its place:
+- **A checkpoint inside a generation.** A crashed run is retried whole. The tool loop belongs to
+  RubyLLM, and making it resumable would be a different library.
+- **Reflection and forgetting in memory.** No decay, no consolidation pass: `Memory` grows until you
+  prune it, and past a few hundred entries the answer is pgvector, not more code here.
+- **A sandbox.** `instance_eval` runs in your process. Real isolation is a swapped executor, above.
+- **Multi-agent orchestration.** An agent is an object, so one agent calling another is a method
+  call. There is nothing to add.
+- **Streaming.** A generation method returns a value, not tokens. RubyLLM streams if you need that.
 
-- [x] **Live objects** — the answer is computed in code and handed back as the object, not retyped
-      as JSON. Done: `finish(value)` plus `returns: SomeClass`.
-- [x] **Tracing** — RubyLLM emits `chat.ruby_llm` and `tool_call.ruby_llm`; point `config.instrumenter`
-      at `ActiveSupport::Notifications` and subscribe. Done, by not writing it.
-- [x] **Conversation history** — the chat stays fresh per call, deliberately: one mutable chat shared
-      by two threads is a bug waiting for production. What carries between calls is the object —
-      `context` renders its state into the next prompt. Done, by keeping less.
-- [x] **Session storage** — persist the agent state so a run can be resumed. Done: an agent is an
-      ordinary Ruby object, so `Marshal.dump` is the session; in Rails the state is already in your
-      models. What is *not* here is a checkpoint inside a generation — that loop belongs to RubyLLM.
-- [x] **MCP tools** — external tools over the Model Context Protocol, via `ruby_llm-mcp`. Done:
-      `mcp :files, …` puts the server's tools on the agent, and generated code calls them.
-- [x] **Skills** — capabilities as markdown files with front matter, loaded on demand rather than
-      all sitting in the system prompt. Done: `skill "path/to/dir"`, one described method.
-- [x] **Memory** — recall that survives across sessions, backed by vector search. Done: `memory`
-      adds `remember` and `recall`, and the store is a field, so it marshals with the agent.
-- [x] **Concurrency** — parallel generation calls. Done: output is buffered per thread instead of
-      through `$stdout`, so threads no longer collide.
+`0.1.0` lands when the API stops moving. Until then the version is a prerelease and means it.
