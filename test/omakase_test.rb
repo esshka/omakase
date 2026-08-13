@@ -278,3 +278,46 @@ class DslTest < Minitest::Test
     assert_match(/returns: must be one of/, error.message)
   end
 end
+
+class McpTest < Minitest::Test
+  # Stands in for a RubyLLM::MCP client and its tools.
+  Tool = Struct.new(:name, :description, :params_schema, :outcome, keyword_init: true) do
+    def execute(**arguments) = outcome.call(arguments)
+  end
+
+  def client(tool) = Struct.new(:tools).new([tool])
+
+  def tool(**overrides)
+    Tool.new(
+      name: "read-file",
+      description: "Read a file\n  from disk.",
+      params_schema: {"type" => "object", "properties" => {"path" => {"type" => "string"}}, "required" => ["path"]},
+      outcome: ->(arguments) { "contents of #{arguments[:path]}" },
+      **overrides
+    )
+  end
+
+  def agent_with(tool)
+    Class.new(Omakase::Agent) { generates :summary }.tap { |klass| Omakase::MCP.attach(klass, client(tool)) }
+  end
+
+  def test_a_tool_becomes_a_method_the_generated_code_can_call
+    agent = agent_with(tool).new
+
+    assert_equal "contents of /tmp/a.txt", agent.read_file(path: "/tmp/a.txt")
+  end
+
+  def test_the_capability_line_carries_the_description_and_the_arguments
+    entry = Omakase::Capabilities.of(agent_with(tool), except: :summary).first
+
+    assert_equal "read_file(**arguments) — Read a file from disk. Arguments — path: string (required)", entry
+  end
+
+  def test_a_failed_call_raises_where_the_model_can_see_it
+    agent = agent_with(tool(outcome: ->(_) { {error: "no such file"} })).new
+
+    observation = Omakase::Executor.call(agent, %(read_file(path: "nope")))
+
+    assert_includes observation, "Omakase::Error: no such file"
+  end
+end

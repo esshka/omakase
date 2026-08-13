@@ -13,4 +13,5 @@ group :development, :test do
   gem "minitest"
   gem "railties"
   gem "rake"
+  gem "ruby_llm-mcp", "~> 1.0"
 end

@@ -131,6 +131,25 @@ Omakase.configure do |config|
 end
 ```
 
+### MCP tools
+
+An MCP server's tools become methods on the agent, listed among its capabilities like any other —
+so generated code calls a remote tool and the agent's own methods in the same expression. Add the
+`ruby_llm-mcp` gem; options are passed to it verbatim.
+
+```ruby
+class DocsAgent < ApplicationAgent
+  mcp :files,
+    transport_type: :stdio,
+    config: {command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", Rails.root.to_s]}
+
+  generates :changelog, "Summarise what changed in the last release."
+end
+```
+
+The connection opens when the class is defined and the tools are read from the server then, so a
+tool's arguments reach the model as documentation. A failed call raises, which the model sees and
+can correct. Only text comes back: an image or audio result is dropped.
 ### Testing
 
 `Omakase::Agent.new(chat:)` takes any object that quacks like a `RubyLLM::Chat`, and one ships with
@@ -278,6 +297,7 @@ generates :plan, strategy: CriticStrategy
     lib/omakase/doc.rb             what an unfamiliar object offers, for generated code
     lib/omakase/executor.rb        runs generated Ruby against the agent
     lib/omakase/tools/ruby.rb      that executor, as a RubyLLM tool, with a call budget
+    lib/omakase/mcp.rb             an MCP server’s tools, as methods on the agent
     lib/omakase/fake_chat.rb       the stand-in chat for tests
     lib/omakase/strategies/        code_act, predict
 
@@ -293,6 +313,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`support_agent.rb`](examples/support_agent.rb) | plain Ruby orchestrating generated methods |
 | [`support_job.rb`](examples/support_job.rb) | generation off the request thread, via ActiveJob |
 | [`rails_app.rb`](examples/rails_app.rb) | a whole Rails app in one file: initializer, agent, controller |
+| [`mcp_agent.rb`](examples/mcp_agent.rb) | an MCP server's tools as methods on the agent |
 
 ```bash
 bundle exec rake                     # tests, no network
@@ -327,8 +348,8 @@ What is not here yet, roughly in the order it would earn its place:
 - [ ] **Conversation history** — the chat is fresh per call. Keeping one per agent would let a
       method continue where the last one left off, at the cost of deciding what to keep.
 - [ ] **Session storage** — persist that history and the agent state so a run can be resumed.
-- [ ] **MCP tools** — external tools over the Model Context Protocol, via `ruby_llm-mcp`. Cheap to
-      add, since generated code can call anything the agent exposes.
+- [x] **MCP tools** — external tools over the Model Context Protocol, via `ruby_llm-mcp`. Done:
+      `mcp :files, …` puts the server's tools on the agent, and generated code calls them.
 - [ ] **Skills** — capabilities as markdown files with front matter, loaded on demand rather than
       all sitting in the system prompt.
 - [ ] **Memory** — recall that survives across sessions, backed by vector search.

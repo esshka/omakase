@@ -11,6 +11,7 @@ require "zeitwerk"
 
 loader = Zeitwerk::Loader.for_gem(warn_on_extra_files: false)
 loader.ignore("#{__dir__}/omakase-agents.rb")
+loader.inflector.inflect("mcp" => "MCP")
 loader.setup
 
 module Omakase

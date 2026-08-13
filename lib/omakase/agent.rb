@@ -27,6 +27,12 @@ module Omakase
         @strategy = name
       end
 
+      # An MCP server's tools, as methods on the agent. Options are passed to
+      # `ruby_llm-mcp` verbatim: `mcp :files, transport_type: :stdio, config: {command: "npx", …}`.
+      def mcp(name, **options)
+        require "ruby_llm/mcp"
+        MCP.attach(self, RubyLLM::MCP.add_client(name: name.to_s, **options))
+      end
       # Documents the method defined next — the docstring Ruby does not have.
       def describe(text)
         @pending_description = text
