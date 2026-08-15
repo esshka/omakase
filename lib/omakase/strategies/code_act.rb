@@ -33,7 +33,7 @@ module Omakase
 
           #{capabilities(request).join("\n")}
 
-          `doc(object)` prints what an object of an unfamiliar type offers.
+          `doc(object)` prints what an object of an unfamiliar type offers; a class works too.
 
           Return the answer from inside the code, never as a message — the last thing you run is:
 

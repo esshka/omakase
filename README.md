@@ -601,8 +601,10 @@ turn naming what was wrong. No code runs. Right for classification, extraction, 
 is `instance_eval`d on the agent, so the agent’s methods and state are the API; anything printed and
 the value of the last expression come back as the observation, and the loop repeats until the model
 calls `finish(value)`. `Capabilities` lists the agent’s own methods (with their `describe` text) in
-the system prompt, minus the method being written, so it cannot recurse into itself. A failure comes
-back with the line that raised, `doc(object)` prints what an object of an unfamiliar type offers, and
+the system prompt, minus the method being written. Leaving it out is not enough on its own, since
+generated code can still find the method, so a generation already running refuses to start again — a
+nested one would open its own chat with its own budget, and nothing would bound the spend. A failure
+comes back with the line that raised, `doc(object)` prints what an object — or a class — offers, and
 an answer that misses the contract is rejected into the same loop — the model corrects itself without
 another request. Nothing in the provider bounds a tool loop, so the tool does: ten calls, then a turn
 to answer with what it has.
@@ -691,11 +693,12 @@ too. Two rules follow:
 - **A marshalled agent is your data, never user input.** `Marshal.load` on bytes someone else can
   write is remote code execution, resumed run or not.
 
-What is bounded: ten tool calls per generation, a 30-second timeout per execution, and 4KB of
-observation. That timeout is Ruby's `Timeout`, which raises wherever the code has got to — inside a
-database driver it can leave the connection unusable — one more reason anything long-running belongs
-in an executor of your own. What is not bounded: what the code can reach. For real isolation, swap
-the executor — anything answering `call(agent, code, timeout:)` will do:
+What is bounded: ten tool calls per generation, one run of a generation at a time, a 30-second
+timeout per execution, and 4KB of observation. That timeout is Ruby's `Timeout`, which raises
+wherever the code has got to — inside a database driver it can leave the connection unusable — one
+more reason anything long-running belongs in an executor of your own. What is not bounded: what the
+code can reach. For real isolation, swap the executor — anything answering `call(agent, code,
+timeout:)` will do:
 
 ```ruby
 Omakase.executor = MySubprocessExecutor    # returns an observation String or Executor::Answer

@@ -4,6 +4,8 @@ module Omakase
   # Fields are state, methods are what the model can call, `generates` declares
   # the methods the model implements.
   class Agent
+    # The generations this thread is inside, so one cannot re-enter itself.
+    RUNNING = :omakase_running
     class << self
       # The model and any RubyLLM chat option. Naming a provider takes the model
       # id on trust, since providers like OpenRouter or Ollama serve ids that are
@@ -170,12 +172,24 @@ module Omakase
 
     def generate(name, inputs)
       generation = self.class.generations.fetch(name)
-      Omakase.emit(:generation, agent: self, name:, inputs:)
-      value = generation.strategy.call(Request.new(agent: self, generation:, inputs:))
-      Omakase.emit(:answer, agent: self, name:, value:)
-      value
-    rescue RubyLLM::Error, RubyLLM::ConfigurationError, RubyLLM::ModelNotFoundError => e
-      raise ProviderError, "#{self.class}##{name}: #{e.message}"
+      running = (Thread.current[RUNNING] ||= [])
+      key = [object_id, name]
+
+      # Generated code can see this method and call it. Each nested call opens its
+      # own chat with its own tool budget, so the budget would bound nothing.
+      raise Error, "#{self.class}##{name} is already running — it cannot call itself" if running.include?(key)
+
+      running.push(key)
+      begin
+        Omakase.emit(:generation, agent: self, name:, inputs:)
+        value = generation.strategy.call(Request.new(agent: self, generation:, inputs:))
+        Omakase.emit(:answer, agent: self, name:, value:)
+        value
+      rescue RubyLLM::Error, RubyLLM::ConfigurationError, RubyLLM::ModelNotFoundError => e
+        raise ProviderError, "#{self.class}##{name}: #{e.message}"
+      ensure
+        running.delete(key)
+      end
     end
   end
 end
