@@ -559,6 +559,10 @@ lock lives in the queue: `with_lock` around a generation would hold a transactio
 provider round-trip — a pinned connection, a long-running transaction, and every other turn on that
 row waiting behind it.
 
+[`examples/conversation_agent.rb`](examples/conversation_agent.rb) is all of this running: two turns
+of one conversation, each crossing the queue, with nothing but an id and a String travelling between
+them. The second turn answers from the first because the history is a table, not a process.
+
 Marshal-into-a-column is the escape hatch for resuming a run mid-flight, not the default: rows can
 be queried and migrated, blobs cannot.
 
@@ -672,6 +676,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`support_agent.rb`](examples/support_agent.rb) | plain Ruby orchestrating generated methods |
 | [`support_job.rb`](examples/support_job.rb) | generation off the request thread, via ActiveJob |
 | [`rails_app.rb`](examples/rails_app.rb) | a whole Rails app in one file: initializer, agent, controller |
+| [`conversation_agent.rb`](examples/conversation_agent.rb) | multi-turn over ActiveRecord, one turn per job, no process state |
 | [`mcp_agent.rb`](examples/mcp_agent.rb) | an MCP server's tools as methods on the agent |
 | [`skill_agent.rb`](examples/skill_agent.rb) | a SKILL.md directory the model loads when it needs it |
 | [`interview_agent.rb`](examples/interview_agent.rb) | remembering across calls, without a shared chat |
