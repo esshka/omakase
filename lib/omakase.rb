@@ -60,6 +60,15 @@ module Omakase
 
     def embedder = @embedder ||= ->(text) { RubyLLM.embed(text).vectors }
 
+    # How an agent gets a chat when none was injected. Anything answering
+    # `call(**options)` will do — one line in test_helper.rb keeps a whole suite
+    # off the network, including the class-level calls a job makes.
+    def chat_factory=(factory)
+      @chat_factory = callable!(factory, "chat_factory")
+    end
+
+    def chat_factory = @chat_factory ||= ->(**options) { RubyLLM.chat(**options) }
+
     # Every step, as it happens: a generation starts, model-written code runs,
     # an answer lands. Anything answering `call(event, **payload)` will do —
     # a logger, a tracer, a test. Nil, the default, costs nothing.

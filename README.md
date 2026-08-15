@@ -422,6 +422,21 @@ chat = Omakase::FakeChat.new { |fake| fake.run("finish(stock_of(:apple))") }
 
 It records `instructions`, `schema`, `tools` and `tasks`, so the prompt is assertable too.
 
+Injecting a chat covers the agent you are testing. A suite covers everything else, including the
+class-level calls a job makes — `SupportAgent.triage(message:)` builds its own agent and has no seam
+to inject through. `Omakase.chat_factory` is that seam, and one line in `test_helper.rb` puts the
+whole suite off the network:
+
+```ruby
+# test/test_helper.rb
+Omakase.chat_factory = ->(**) { Omakase::FakeChat.new { raise "an agent asked for a model" } }
+```
+
+Make it raise, and any generation you forgot to stub fails loudly instead of quietly calling a
+provider from CI. An injected `chat:` still wins, so the tests that mean to run an agent keep
+working. Anything answering `call(**options)` will do; the options are the class's chat options, so
+a factory can assert the model too.
+
 ### Listening in
 
 One callback hears every step as it happens: a generation starting, model-written code running,

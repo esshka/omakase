@@ -344,8 +344,35 @@ class ReliabilityTest < Minitest::Test
 
     assert_equal "executor must answer call, got String", error.message
     assert_raises(Omakase::Error) { Omakase.listener = 42 }
+    assert_raises(Omakase::Error) { Omakase.chat_factory = 42 }
   ensure
     Omakase.executor = nil
+  end
+
+  def test_the_chat_factory_keeps_a_suite_off_the_network
+    built = []
+    Omakase.chat_factory = lambda do |**options|
+      built << options
+      FakeChat.new { {"result" => "positive"} }
+    end
+
+    # The class-level form is what a job calls, and it injects no chat of its own.
+    assert_equal "positive", FeedbackAgent.sentiment_of(text: "love it")
+    assert_equal [{}], built
+
+    Class.new(FeedbackAgent) { model "small-model" }.sentiment_of(text: "again")
+
+    assert_equal [{}, {model: "small-model"}], built # the class's chat options reach the factory
+  ensure
+    Omakase.chat_factory = nil
+  end
+
+  def test_an_injected_chat_still_wins_over_the_factory
+    Omakase.chat_factory = ->(**) { raise "the factory should not be reached" }
+
+    assert_equal "mixed", FeedbackAgent.new(chat: FakeChat.new { {"result" => "mixed"} }).sentiment_of(text: "eh")
+  ensure
+    Omakase.chat_factory = nil
   end
 
   def test_an_executor_that_breaks_its_contract_does_not_reach_the_model

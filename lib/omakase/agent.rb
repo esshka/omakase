@@ -135,7 +135,7 @@ module Omakase
     # A fresh conversation per call — two threads calling one agent must not
     # share a mutable chat. What carries between calls is the object's own state.
     # Overrides land on top of the class's options; an injected chat ignores them.
-    def chat(**overrides) = @chat || RubyLLM.chat(**self.class.chat_options.merge(overrides))
+    def chat(**overrides) = @chat || Omakase.chat_factory.call(**self.class.chat_options.merge(overrides))
 
     # That state, as the model should read it: rebuilt on every call, and added
     # to the class's instructions. Override it to remember anything.
