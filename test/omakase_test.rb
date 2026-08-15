@@ -2,6 +2,7 @@
 
 require "minitest/autorun"
 require "tmpdir"
+require "active_model"
 require_relative "../lib/omakase"
 
 FakeChat = Omakase::FakeChat
@@ -33,6 +34,20 @@ class InventoryAgent < Omakase::Agent
 end
 
 Ticket = Struct.new(:id, :severity)
+
+# The shape every Rails object has: it knows whether it is well-formed.
+class Draft
+  include ActiveModel::Model
+
+  attr_accessor :title, :body
+  validates :title, presence: true
+end
+
+class DraftAgent < Omakase::Agent
+  instructions "You draft posts."
+
+  generates :draft, "Draft a post about the topic.", returns: Draft
+end
 
 class TicketAgent < Omakase::Agent
   instructions "You file tickets."
@@ -183,6 +198,29 @@ class CodeActTest < Minitest::Test
 
     assert_equal 3, InventoryAgent.new({}, chat:).total_stock(items: [])
     assert_includes rejected, %(finish rejected: expected <integer>, got "three")
+  end
+
+  def test_an_invalid_object_is_refused_and_the_model_fixes_it_in_the_loop
+    rejected = nil
+    chat = FakeChat.new do |fake|
+      rejected = fake.run(%(finish(Draft.new(body: "a post about mugs"))))
+      fake.run(%(finish(Draft.new(title: "Mugs", body: "a post about mugs"))))
+      "done"
+    end
+
+    draft = DraftAgent.new(chat:).draft(topic: "mugs")
+
+    assert_equal "Mugs", draft.title
+    assert_includes rejected, "finish rejected: Draft is invalid: Title can't be blank"
+  end
+
+  def test_an_object_that_cannot_say_it_is_valid_is_taken_as_it_is
+    chat = FakeChat.new do |fake|
+      fake.run(%(finish(Ticket.new("A-1", "high"))))
+      "done"
+    end
+
+    assert_equal "A-1", TicketAgent.new(chat:).file(message: "broken").id
   end
 
   def test_a_ruby_class_return_type_hands_back_the_object_itself

@@ -20,9 +20,9 @@ module Omakase
     def code_only? = true
 
     def take(value)
-      return value if value.is_a?(@klass)
+      raise ContractError, "expected #{describe}, got #{value.class}" unless value.is_a?(@klass)
 
-      raise ContractError, "expected #{describe}, got #{value.class}"
+      well_formed(value)
     end
 
     def definition
@@ -30,5 +30,18 @@ module Omakase
     end
 
     alias_method :json, :definition
+
+    private
+
+    # An object that can say whether it is well-formed gets asked — ActiveModel,
+    # ActiveRecord, anything of that shape. The refusal reaches the model as an
+    # observation, so your own validations are what it has to satisfy, and they
+    # stay where you wrote them instead of being retyped into a prompt.
+    def well_formed(value)
+      return value unless value.respond_to?(:valid?) && value.respond_to?(:errors)
+      return value if value.valid?
+
+      raise ContractError, "#{@klass} is invalid: #{value.errors.full_messages.join("; ")}"
+    end
   end
 end
