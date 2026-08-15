@@ -405,6 +405,43 @@ things one agent learns about its work; past that it is your database's job — 
 reimplement against it. And for a few dozen facts, `@notes.grep(/shipping/)` beats every word of
 this.
 
+### Sub-agents
+
+Some work is a tree, and the tree is usually already in your database — a comment thread, a category
+tree, a bill of materials. One agent per node folds it from the leaves up, and the recursion belongs
+to the data: a node with no children is the base case, so nothing has to invent how deep to go.
+
+```ruby
+class ThreadAgent < ApplicationAgent
+  instructions "You sum up a discussion for someone who has not read it."
+  strategy :predict
+
+  def initialize(comment, **options)
+    super(**options)
+    @comment = comment
+  end
+
+  def roll_up
+    return said if @comment.replies.empty?
+
+    summarise(comment: said, replies: @comment.replies.map { |reply| self.class.new(reply).roll_up })
+  end
+
+  generates :summarise, "Sum up this comment together with the replies it drew.", returns: :string
+
+  private
+
+  def said = "#{@comment.author}: #{@comment.body}"
+end
+```
+
+A leaf is its own summary, so the model is asked only where there is something to fold. A fresh
+agent per branch is not ceremony either: siblings then share no state, and one object may not
+re-enter a generation it is already inside. That is refused, because a nested run opens its own chat
+with its own tool budget — nothing would bound the spend. Generated code can start a sub-agent the
+same way. [`examples/recursive_agent.rb`](examples/recursive_agent.rb) is the runnable version: four
+comments, two of them leaves, two generations.
+
 ### Testing
 
 `Omakase::Agent.new(chat:)` takes any object that quacks like a `RubyLLM::Chat`, and one ships with
@@ -676,6 +713,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`skill_agent.rb`](examples/skill_agent.rb) | a SKILL.md directory the model loads when it needs it |
 | [`interview_agent.rb`](examples/interview_agent.rb) | remembering across calls, without a shared chat |
 | [`memory_agent.rb`](examples/memory_agent.rb) | recall by meaning, kept across a marshalled run |
+| [`recursive_agent.rb`](examples/recursive_agent.rb) | a comment thread folded from the leaves up, one agent per node |
 
 ```bash
 bundle exec rake                     # tests and Standard, no network

@@ -254,6 +254,21 @@ class ReliabilityTest < Minitest::Test
     assert_empty Thread.current[Omakase::Agent::RUNNING] # nothing held once the run ends
   end
 
+  def test_a_fresh_agent_may_run_the_generation_its_caller_is_inside
+    inner = FakeChat.new do |fake|
+      fake.run("finish(2)")
+      "done"
+    end
+    outer = FakeChat.new do |fake|
+      fake.run("finish(LoopAgent.new(chat: @inner).work(task: 'part') + 1)")
+      "done"
+    end
+    agent = LoopAgent.new(chat: outer)
+    agent.instance_variable_set(:@inner, inner)
+
+    assert_equal 3, agent.work(task: "whole") # sub-agents recurse; only the same object may not
+  end
+
   def test_generated_code_cannot_run_forever
     observation = Omakase::Executor.call(@agent, "sleep 5", timeout: 0.05)
 
