@@ -407,40 +407,40 @@ this.
 
 ### Sub-agents
 
-Work that is a tree gets one agent per node: the model names the parts, and a fresh agent of the
-same class takes each one. The recursion is plain Ruby, so how far it goes is a number you can read
-rather than a sentence the model may ignore.
+Some work is a tree, and the tree is usually already in your database — a comment thread, a category
+tree, a bill of materials. One agent per node folds it from the leaves up, and the recursion belongs
+to the data: a node with no children is the base case, so nothing has to invent how deep to go.
 
 ```ruby
-class PlannerAgent < ApplicationAgent
-  instructions "You break work into parts."
+class ThreadAgent < ApplicationAgent
+  instructions "You sum up a discussion for someone who has not read it."
   strategy :predict
 
-  def initialize(depth:, **options)
+  def initialize(comment, **options)
     super(**options)
-    @depth = depth
+    @comment = comment
   end
 
-  def plan(task)
-    return [] if @depth.zero?
+  def roll_up
+    return said if @comment.replies.empty?
 
-    split(task:)[:parts].map { |part| [part, deeper.plan(part)] }
+    summarise(comment: said, replies: @comment.replies.map { |reply| self.class.new(reply).roll_up })
   end
 
-  generates :split, "Name the two or three parts this task breaks into." do
-    array :parts, of: :string
-  end
+  generates :summarise, "Sum up this comment together with the replies it drew.", returns: :string
 
   private
 
-  def deeper = self.class.new(depth: @depth - 1, chat: @chat)
+  def said = "#{@comment.author}: #{@comment.body}"
 end
 ```
 
-A fresh agent per branch is not ceremony: siblings then share no state, and one object may not
+A leaf is its own summary, so the model is asked only where there is something to fold. A fresh
+agent per branch is not ceremony either: siblings then share no state, and one object may not
 re-enter a generation it is already inside. That is refused, because a nested run opens its own chat
 with its own tool budget — nothing would bound the spend. Generated code can start a sub-agent the
-same way. [`examples/recursive_agent.rb`](examples/recursive_agent.rb) is the runnable version.
+same way. [`examples/recursive_agent.rb`](examples/recursive_agent.rb) is the runnable version: four
+comments, two of them leaves, two generations.
 
 ### Testing
 
@@ -713,7 +713,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`skill_agent.rb`](examples/skill_agent.rb) | a SKILL.md directory the model loads when it needs it |
 | [`interview_agent.rb`](examples/interview_agent.rb) | remembering across calls, without a shared chat |
 | [`memory_agent.rb`](examples/memory_agent.rb) | recall by meaning, kept across a marshalled run |
-| [`recursive_agent.rb`](examples/recursive_agent.rb) | a tree of work, one fresh sub-agent per node |
+| [`recursive_agent.rb`](examples/recursive_agent.rb) | a comment thread folded from the leaves up, one agent per node |
 
 ```bash
 bundle exec rake                     # tests and Standard, no network
