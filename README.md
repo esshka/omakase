@@ -226,7 +226,9 @@ generates :count_items, returns: :integer      # :string (default), :integer, :n
 
 Both forms are the same mechanism: a schema whose only property is `result` unwraps to that value.
 A Ruby class works too — `returns: Ticket` — and then the method hands back the object rather than
-data; see [`:code_act`](#strategies) for what that requires.
+data; see [`:code_act`](#strategies) for what that requires. If that object can say whether it is
+well-formed — anything answering `valid?` and `errors`, which is every ActiveModel — it is asked, and
+an invalid one is refused.
 
 ### Attachments
 
@@ -495,6 +497,25 @@ end
 Jobs move data, not objects: arguments and results have to serialize, so a `returns: SomeClass`
 answer — a live Ruby object — does not survive the trip. [`examples/support_job.rb`](examples/support_job.rb)
 is the runnable version, three tickets triaged concurrently by the async adapter.
+
+**Validations are the contract.** A `returns:` class that answers `valid?` and `errors` gets asked
+before the answer is handed back, so a generation cannot return a record your own validations
+reject:
+
+```ruby
+class Post < ApplicationRecord
+  validates :slug, format: {with: /\A[a-z0-9-]+\z/}, length: {maximum: 12}
+end
+
+class BlogAgent < ApplicationAgent
+  generates :write, "Write a post about the topic.", returns: Post
+end
+```
+
+Nothing about the slug is in the prompt. Under `:code_act` the refusal goes back to the model as
+`finish rejected: Post is invalid: Slug is too long (maximum is 12 characters)`, and it corrects
+itself inside the same loop, within its call budget. Your rules stay in the model, where the rest of
+the application already reads them.
 
 **Threads.** Puma is multi-threaded and so is this: printing from generated code goes to a
 per-thread buffer, and each call gets its own chat and its own agent instance. Concurrent calls are
