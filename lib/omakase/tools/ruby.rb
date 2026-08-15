@@ -41,7 +41,7 @@ module Omakase
         # The seam's contract, checked here so a wrong executor cannot reach the model.
         raise Error, "executor must return a String or Executor::Answer, got #{outcome.class}" unless outcome.is_a?(Executor::Answer)
 
-        @answer = Executor::Answer.new(value: @schema.take(outcome.value))
+        @answer = Executor::Answer.new(value: @schema.take(outcome.value), printed: outcome.printed)
         halt("Answer accepted.")
       rescue ContractError => e
         # Off-contract answers are corrected inside the same loop, not by another request.

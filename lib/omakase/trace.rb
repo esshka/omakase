@@ -29,9 +29,13 @@ module Omakase
 
     def inputs(inputs) = inputs.map { |name, value| "#{name}: #{truncate(value.inspect)}" }.join("\n")
 
-    # An Answer is `finish(value)` ending the run; anything else is what the code printed.
+    # An Answer is `finish(value)` ending the run — with anything printed before it,
+    # which the tool result never carries because the run is over. Otherwise the
+    # outcome is already the text the model reads.
     def outcome(outcome)
-      truncate(outcome.is_a?(Executor::Answer) ? "finish #{outcome.value.inspect}" : outcome.to_s)
+      return truncate(outcome.to_s) unless outcome.is_a?(Executor::Answer)
+
+      truncate([outcome.printed, "finish #{outcome.value.inspect}"].reject(&:empty?).join("\n"))
     end
 
     def truncate(text) = (text.length > LIMIT) ? "#{text[0, LIMIT]}…" : text

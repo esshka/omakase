@@ -11,8 +11,12 @@ module Omakase
     TRACE = /\A#{Regexp.escape(SOURCE)}:\d+/
     MAX_OUTPUT = 4_000
 
-    # What `finish(value)` handed back: the answer as a Ruby value, not as text.
-    Answer = Data.define(:value)
+    # What `finish(value)` handed back: the answer as a Ruby value, not as text,
+    # and whatever the code printed on the way there. `printed` defaults, so a
+    # replacement executor that only knows the value still satisfies the seam.
+    Answer = Data.define(:value, :printed) do
+      def initialize(value:, printed: "") = super
+    end
 
     module_function
 
@@ -22,7 +26,7 @@ module Omakase
         value = capturing(printed) { Timeout.timeout(timeout) { agent.instance_eval(code, SOURCE, 1) } }
         return observation([printed.string.chomp, "=> #{value.inspect}"])
       end
-      Answer.new(value: answer)
+      Answer.new(value: answer, printed: printed.string.chomp)
     rescue ScriptError, StandardError => e
       observation([printed.string.chomp, failure(e, code)])
     end

@@ -442,7 +442,9 @@ Omakase.listener = Omakase::Trace.new
 #     message: "my mug arrived cracked"
 # · ruby
 #     order = order_db.find(1)
-#     finish(Ticket.new("A-1", :high)) if refund_eligible?(order)
+#     puts "eligible: #{refund_eligible?(order)}"
+#     finish(Ticket.new("A-1", :high))
+#     eligible: true
 #     finish #<struct Ticket id="A-1", severity=:high>
 # ← SupportAgent#triage
 #     #<struct Ticket id="A-1", severity=:high>

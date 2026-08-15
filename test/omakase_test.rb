@@ -231,6 +231,13 @@ class ReliabilityTest < Minitest::Test
     assert_match(/Timeout::Error/, observation)
   end
 
+  def test_what_was_printed_before_finish_is_not_lost
+    answer = Omakase::Executor.call(@agent, %(puts "looked it up"\nfinish(3)))
+
+    assert_equal 3, answer.value
+    assert_equal "looked it up", answer.printed
+  end
+
   def test_the_executor_is_swappable
     stub = Object.new
     def stub.call(_agent, code, timeout:) = Omakase::Executor::Answer.new(value: code.length)
