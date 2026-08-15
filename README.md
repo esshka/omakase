@@ -79,6 +79,53 @@ gem "omakase-agents"     # the library is `Omakase`
 gem install omakase-agents
 ```
 
+## Quickstart
+
+One file, one working agent. Five minutes.
+
+**1.** Install the gem and set a key:
+
+```bash
+gem install omakase-agents
+export OPENROUTER_API_KEY=sk-or-...
+```
+
+**2.** Save this as `triage.rb`:
+
+```ruby
+require "omakase"
+
+Omakase.configure_from_env
+
+class TriageAgent < Omakase::Agent
+  model "meta/muse-glimmer-30b", provider: :openrouter
+  instructions "You triage customer support messages."
+  strategy :predict
+
+  generates :triage do
+    string :severity, enum: %w[low medium high]
+    string :summary
+  end
+end
+
+pp TriageAgent.triage(message: "The app crashes every time I open my invoices")
+```
+
+**3.** Run it:
+
+```bash
+ruby triage.rb
+```
+
+A Ruby Hash comes back, matching the schema you declared:
+
+```ruby
+{severity: "high", summary: "App crashes on opening invoices"}
+```
+
+You wrote no JSON parsing and registered no tool. Next: [Usage](#usage) for the rest of the
+API, or [How it works](#how-it-works) for why it is built this way.
+
 ## Usage
 
 The whole API, in one class:
