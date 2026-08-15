@@ -386,6 +386,25 @@ class DslTest < Minitest::Test
     Omakase.listener = nil
   end
 
+  def test_the_trace_prints_each_step_for_a_human
+    io = StringIO.new
+    Omakase.listener = Omakase::Trace.new(io:)
+
+    chat = FakeChat.new { {"result" => "positive"} }
+    FeedbackAgent.new(chat:).sentiment_of(text: "love it")
+    tool = Omakase::Tools::Ruby.new(InventoryAgent.new({"apple" => 3}), Omakase::Schema.define(returns: :integer))
+    tool.execute(code: "stock_of('apple')")
+
+    assert_includes io.string, "→ FeedbackAgent#sentiment_of"
+    assert_includes io.string, %(text: "love it")
+    assert_includes io.string, "← FeedbackAgent#sentiment_of"
+    assert_includes io.string, "· ruby"
+    assert_includes io.string, "stock_of('apple')"
+    assert_includes io.string, "=> 3"
+  ensure
+    Omakase.listener = nil
+  end
+
   def test_generation_methods_are_callable_on_the_class
     agent = Class.new(FeedbackAgent) do
       generates :answer

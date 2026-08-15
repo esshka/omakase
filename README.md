@@ -432,6 +432,22 @@ Omakase.listener = ->(event, **payload) { Rails.logger.info("#{event} #{payload.
 `:generation` carries `agent:, name:, inputs:` · `:ruby` carries `agent:, code:, outcome:` ·
 `:answer` carries `agent:, name:, value:`.
 
+One listener is included, for reading a run rather than storing it: it prints each step to stderr,
+in colour when stderr is a terminal.
+
+```ruby
+Omakase.listener = Omakase::Trace.new
+
+# → SupportAgent#triage
+#     message: "my mug arrived cracked"
+# · ruby
+#     order = order_db.find(1)
+#     finish(Ticket.new("A-1", :high)) if refund_eligible?(order)
+#     finish #<struct Ticket id="A-1", severity=:high>
+# ← SupportAgent#triage
+#     #<struct Ticket id="A-1", severity=:high>
+```
+
 In Rails there is already a bus for this, and one line puts the events on it — subscribers and your
 APM pick them up with nothing further:
 
@@ -636,6 +652,7 @@ generates :plan, strategy: CriticStrategy
     lib/omakase/skills.rb          a SKILL.md directory, as one described method
     lib/omakase/memory.rb          remember and recall, by meaning
     lib/omakase/fake_chat.rb       the stand-in chat for tests
+    lib/omakase/trace.rb           those events, printed for a human
     lib/omakase/strategies/        code_act, predict
 
 ## Examples
