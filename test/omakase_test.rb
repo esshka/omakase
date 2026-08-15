@@ -40,6 +40,10 @@ class TicketAgent < Omakase::Agent
   generates :file, "File a ticket for the message.", returns: Ticket
 end
 
+class LoopAgent < Omakase::Agent
+  generates :work, "Do the work.", returns: :integer
+end
+
 class PredictTest < Minitest::Test
   def test_a_scalar_return_type_unwraps_to_the_value
     chat = FakeChat.new { {"result" => "positive"} }
@@ -147,6 +151,17 @@ class CodeActTest < Minitest::Test
       Omakase::Doc.of(record)
   end
 
+  def test_a_class_reads_as_what_one_of_its_objects_would_have
+    model = Class.new do
+      def self.to_s = "Order"
+      def self.column_names = %w[id email]
+
+      def total = 39.9
+    end
+
+    assert_equal ["Order", "  total()", "  id", "  email"].join("\n"), Omakase::Doc.of(model)
+  end
+
   def test_finish_answers_in_one_turn_with_the_computed_value
     chat = FakeChat.new do |fake|
       fake.run("finish(stock_of(:apple) + stock_of(:pear))")
@@ -223,6 +238,20 @@ class ReliabilityTest < Minitest::Test
     end.map(&:value)
 
     assert_equal ["0\n=> nil", "1\n=> nil"], outputs
+  end
+
+  def test_a_generation_cannot_call_itself
+    refused = nil
+    chat = FakeChat.new do |fake|
+      refused = fake.run("work(task: 'again')")
+      fake.run("finish(1)")
+      "done"
+    end
+    agent = LoopAgent.new(chat:)
+
+    assert_equal 1, agent.work(task: "start")
+    assert_includes refused, "LoopAgent#work is already running"
+    assert_empty Thread.current[Omakase::Agent::RUNNING] # nothing held once the run ends
   end
 
   def test_generated_code_cannot_run_forever
