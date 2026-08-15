@@ -183,6 +183,18 @@ FeedbackAgent.analyze(text: "Great product, but shipping was slow")
 FeedbackAgent.new.analyze(text: "…")
 ```
 
+By default they take whatever you pass. Name them with `takes:` and they become a real Ruby
+signature, so a missing or misspelled argument is an `ArgumentError` at the call rather than noise
+in a prompt — and the model reads the names instead of `**inputs`:
+
+```ruby
+generates :decide, "Decide this refund.", takes: %i[email complaint], returns: Refund
+
+RefundAgent.decide(email: "ada@example.com")                 # => ArgumentError: missing keyword: :complaint
+RefundAgent.decide(emial: "…", complaint: "…")               # => ArgumentError: unknown keyword: :emial
+```
+
+`with:` stays available on a named signature, since attachments are not part of the prompt.
 `describe` above an ordinary method is the docstring Ruby does not have — it is what the model reads
 when it decides what to call.
 

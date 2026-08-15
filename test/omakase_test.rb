@@ -330,6 +330,27 @@ class DslTest < Minitest::Test
     assert_match(/a prompt is a String or a block/, error.message)
   end
 
+  def test_named_inputs_are_a_signature_ruby_checks
+    agent_class = Class.new(Omakase::Agent) do
+      strategy :predict
+      generates :decide, "Decide.", takes: %i[email complaint], returns: :string
+    end
+    chat = FakeChat.new { {"result" => "refunded"} }
+
+    assert_equal "refunded", agent_class.new(chat:).decide(email: "ada@example.com", complaint: "cracked")
+    assert_raises(ArgumentError) { agent_class.new(chat:).decide(email: "ada@example.com") }
+    assert_raises(ArgumentError) { agent_class.new(chat:).decide(email: "a", complaint: "b", emial: "typo") }
+    assert_equal "decide(email:, complaint:, with:) — Decide.", Omakase::Capabilities.of(agent_class).first
+  end
+
+  def test_named_inputs_that_are_not_identifiers_are_refused_where_they_are_declared
+    error = assert_raises(Omakase::Error) do
+      Class.new(Omakase::Agent) { generates :answer, takes: ["not an identifier"] }
+    end
+
+    assert_match(/plain keyword names/, error.message)
+  end
+
   def test_a_generation_can_name_its_own_model
     agent_class = Class.new(Omakase::Agent) do
       strategy :predict

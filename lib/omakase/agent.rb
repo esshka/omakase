@@ -53,8 +53,9 @@ module Omakase
       end
 
       # Without a prompt, the method name is the prompt. A block instead of a
-      # string is a prompt read at call time, on the agent.
-      def generates(name, prompt = nil, returns: nil, strategy: nil, model: nil, &schema)
+      # string is a prompt read at call time, on the agent. `takes:` names the
+      # keyword arguments, and then Ruby checks them.
+      def generates(name, prompt = nil, takes: nil, returns: nil, strategy: nil, model: nil, &schema)
         # Redeclaring an inherited generation is how a subclass specialises one.
         # Landing on a method you wrote is not that, and would replace it unseen.
         if Capabilities.names(self).include?(name) && !generations.key?(name)
@@ -72,7 +73,7 @@ module Omakase
           strategy: Strategies.fetch(strategy || self.strategy),
           model:
         )
-        define_method(name) { |**inputs| generate(name, inputs) }
+        define_generation_method(name, takes)
         define_singleton_method(name) { |**inputs| new.public_send(name, **inputs) }
       end
 
@@ -83,6 +84,25 @@ module Omakase
       def chat_options = @chat_options ||= {}
 
       private
+
+      # Named inputs become a real signature, so a missing or misspelled argument
+      # is an ArgumentError at the call rather than noise in a prompt — and the
+      # model reads the names too, instead of `**inputs`.
+      def define_generation_method(name, takes)
+        return define_method(name) { |**inputs| generate(name, inputs) } if takes.nil?
+
+        keywords = Array(takes)
+        bad = [name.to_s.chomp("?").chomp("!"), *keywords].reject { |word| /\A[a-z_]\w*\z/.match?(word.to_s) }
+        raise Error, "#{self}##{name}: takes: needs plain keyword names, got #{bad.inspect}" if bad.any?
+
+        class_eval <<~RUBY, __FILE__, __LINE__ + 1
+          def #{name}(#{keywords.map { |key| "#{key}:" }.join(", ")}, with: nil)
+            inputs = {#{keywords.map { |key| "#{key}: #{key}" }.join(", ")}}
+            inputs[:with] = with unless with.nil?
+            generate(:#{name}, inputs)
+          end
+        RUBY
+      end
 
       def humanize(name)
         text = name.to_s.tr("_", " ").capitalize
