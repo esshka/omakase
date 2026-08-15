@@ -405,6 +405,43 @@ things one agent learns about its work; past that it is your database's job — 
 reimplement against it. And for a few dozen facts, `@notes.grep(/shipping/)` beats every word of
 this.
 
+### Sub-agents
+
+Work that is a tree gets one agent per node: the model names the parts, and a fresh agent of the
+same class takes each one. The recursion is plain Ruby, so how far it goes is a number you can read
+rather than a sentence the model may ignore.
+
+```ruby
+class PlannerAgent < ApplicationAgent
+  instructions "You break work into parts."
+  strategy :predict
+
+  def initialize(depth:, **options)
+    super(**options)
+    @depth = depth
+  end
+
+  def plan(task)
+    return [] if @depth.zero?
+
+    split(task:)[:parts].map { |part| [part, deeper.plan(part)] }
+  end
+
+  generates :split, "Name the two or three parts this task breaks into." do
+    array :parts, of: :string
+  end
+
+  private
+
+  def deeper = self.class.new(depth: @depth - 1, chat: @chat)
+end
+```
+
+A fresh agent per branch is not ceremony: siblings then share no state, and one object may not
+re-enter a generation it is already inside. That is refused, because a nested run opens its own chat
+with its own tool budget — nothing would bound the spend. Generated code can start a sub-agent the
+same way. [`examples/recursive_agent.rb`](examples/recursive_agent.rb) is the runnable version.
+
 ### Testing
 
 `Omakase::Agent.new(chat:)` takes any object that quacks like a `RubyLLM::Chat`, and one ships with
@@ -676,6 +713,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`skill_agent.rb`](examples/skill_agent.rb) | a SKILL.md directory the model loads when it needs it |
 | [`interview_agent.rb`](examples/interview_agent.rb) | remembering across calls, without a shared chat |
 | [`memory_agent.rb`](examples/memory_agent.rb) | recall by meaning, kept across a marshalled run |
+| [`recursive_agent.rb`](examples/recursive_agent.rb) | a tree of work, one fresh sub-agent per node |
 
 ```bash
 bundle exec rake                     # tests and Standard, no network
