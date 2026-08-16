@@ -45,7 +45,8 @@ module Omakase
     end
 
     # Where generated code runs. Anything answering `call(agent, code, timeout:)`
-    # will do — swap in a subprocess or a container to get real isolation.
+    # will do — Executor::Subprocess is the reference: a child process, so a
+    # timeout cannot take this one with it.
     def executor=(executor)
       @executor = callable!(executor, "executor")
     end

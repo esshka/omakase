@@ -300,13 +300,13 @@ class DocsAgent < ApplicationAgent
 end
 ```
 
-The connection opens when the class is defined and the tools are read from the server then, so a
+The connection opens on the first generate and the tools are read from the server then, so a
 tool's arguments reach the model as documentation. A failed call raises, which the model sees and
 can correct. Only text comes back: an image or audio result is dropped.
 
-That it happens at class-definition time has a cost worth knowing: under `config.eager_load = true`
-an unreachable server fails the boot, and every reload in development reconnects. If a deploy must
-not wait on a sidecar, keep MCP agents out of the eager-loaded paths.
+Class load does not talk to the server, so an unreachable sidecar does not fail boot, and a reload
+does not reconnect. The first generate pays that cost; if the server is down, its tools are absent
+and the generate still runs. The next generate tries that server again.
 
 ### Skills
 
@@ -739,7 +739,7 @@ generates :plan, strategy: CriticStrategy
     lib/omakase/type.rb            return types that are a Ruby class
     lib/omakase/capabilities.rb    the agent’s own methods, listed for the model
     lib/omakase/doc.rb             what an unfamiliar object offers, for generated code
-    lib/omakase/executor.rb        runs generated Ruby against the agent
+    lib/omakase/executor.rb        in-process; Executor::Subprocess isolates a crash
     lib/omakase/tools/ruby.rb      that executor, as a RubyLLM tool, with a call budget
     lib/omakase/mcp.rb             an MCP server’s tools, as methods on the agent
     lib/omakase/skills.rb          a SKILL.md directory, as one described method
@@ -785,14 +785,17 @@ too. Two rules follow:
   write is remote code execution, resumed run or not.
 
 What is bounded: ten tool calls per generation, one run of a generation at a time, a 30-second
-timeout per execution, and 4KB of observation. That timeout is Ruby's `Timeout`, which raises
-wherever the code has got to — inside a database driver it can leave the connection unusable — one
-more reason anything long-running belongs in an executor of your own. What is not bounded: what the
-code can reach. For real isolation, swap the executor — anything answering `call(agent, code,
-timeout:)` will do:
+timeout per execution, and 4KB of observation. The default executor uses Ruby's `Timeout` in this
+process — inside a database driver it can leave the connection unusable.
+`Omakase::Executor::Subprocess` is the reference swap: the same `instance_eval`, in a child process,
+so a timeout or a crash takes the child and not you. Ivars written in the child are marshalled back
+(a generation is several tool calls); methods the model defined on the object die with the child.
+The child is a copy of this process, so it can still reach ActiveRecord, ENV, and the disk — that is
+isolation of fate, not of capability. Untrusted input still belongs to `:predict`. Do not use it from
+a threaded server; run the generation in a job.
 
 ```ruby
-Omakase.executor = MySubprocessExecutor    # returns an observation String or Executor::Answer
+Omakase.executor = Omakase::Executor::Subprocess
 ```
 
 ## Not here, on purpose
@@ -801,7 +804,8 @@ Omakase.executor = MySubprocessExecutor    # returns an observation String or Ex
   RubyLLM, and making it resumable would be a different library.
 - **Reflection and forgetting in memory.** No decay, no consolidation pass: `Memory` grows until you
   prune it, and past a few hundred entries the answer is pgvector, not more code here.
-- **A sandbox.** `instance_eval` runs in your process. Real isolation is a swapped executor, above.
+- **A sandbox.** The child can still reach what this process can. Subprocess isolates a crash and a
+  timeout, not `File` or ActiveRecord.
 - **Multi-agent orchestration.** An agent is an object, so one agent calling another is a method
   call. There is nothing to add.
 - **Streaming.** A generation method returns a value, not tokens. RubyLLM streams if you need that.

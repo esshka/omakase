@@ -2,7 +2,7 @@
 
 module Omakase
   # Runs model-written Ruby in the agent's own context.
-  # ponytail: instance_eval is not a sandbox — see Omakase.executor to swap it.
+  # ponytail: instance_eval is not a sandbox — see Executor::Subprocess.
   module Executor
     SOURCE = "(generated)"
     RESULT = :omakase_result
@@ -51,6 +51,101 @@ module Omakase
       yield
     ensure
       Thread.current[OUTPUT] = previous
+    end
+
+    # Generated code runs in a child process so a timeout, a crash, or a
+    # runaway loop cannot take the parent with it. The child is a copy of
+    # this process — it can still reach ActiveRecord, ENV, and the disk.
+    # That is isolation of fate, not of capability. Untrusted input still
+    # belongs to :predict.
+    #
+    # Ivars written in the child are marshalled back, so a generation's
+    # second tool call sees what the first one set. Methods the model
+    # defined on the object die with the child.
+    module Subprocess
+      module_function
+
+      def call(agent, code, timeout: TIMEOUT)
+        reader = writer = pid = nil
+        raise Error, "Executor::Subprocess needs Process.fork" unless Process.respond_to?(:fork)
+
+        reader, writer = IO.pipe
+        reader.binmode
+        writer.binmode
+        pid = fork do
+          reader.close
+          send_packet(writer, agent, Executor.call(agent, code, timeout:))
+        ensure
+          exit! 0
+        end
+        writer.close
+        take_packet(reader, agent, pid, timeout)
+      ensure
+        reader.close if reader && !reader.closed?
+        reap(pid)
+      end
+
+      def send_packet(io, agent, result)
+        io.write(dump(agent, result))
+      ensure
+        io.close
+      end
+
+      def dump(agent, result)
+        Marshal.dump({result:, state: agent.marshal_dump})
+      rescue TypeError
+        Marshal.dump({result: carry(result), state: nil})
+      end
+
+      def carry(result)
+        Marshal.dump(result)
+        result
+      rescue TypeError => e
+        klass = result.is_a?(Answer) ? result.value.class : result.class
+        Executor.observation(["cannot return #{klass} across the process boundary: #{e.message}"])
+      end
+
+      def take_packet(reader, agent, pid, timeout)
+        ready, = IO.select([reader], nil, nil, timeout)
+        return timed_out(pid) unless ready
+
+        payload = reader.read
+        return child_ended(pid) if payload.nil? || payload.empty?
+
+        packet = Marshal.load(payload)
+        agent.marshal_load(packet[:state]) if packet[:state]
+        packet[:result]
+      rescue TypeError, ArgumentError
+        child_ended(pid)
+      end
+
+      def timed_out(pid)
+        stop(pid)
+        Executor.observation(["execution timed out"])
+      end
+
+      def child_ended(pid)
+        Executor.observation(["child process #{fate(reap(pid))}"])
+      end
+
+      def fate(status)
+        return "was killed" if status.nil? || status.signaled?
+        return "ended without an answer" if status.success?
+
+        "exited #{status.exitstatus}"
+      end
+
+      def stop(pid)
+        Process.kill("KILL", pid)
+      rescue Errno::ESRCH, TypeError
+        nil
+      end
+
+      def reap(pid)
+        Process.wait2(pid)&.last if pid
+      rescue Errno::ECHILD
+        nil
+      end
     end
   end
 end
