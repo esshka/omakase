@@ -31,10 +31,8 @@ module Omakase
 
       # An MCP server's tools, as methods on the agent. Options are passed to
       # `ruby_llm-mcp` verbatim: `mcp :files, transport_type: :stdio, config: {command: "npx", …}`.
-      def mcp(name, **options)
-        require "ruby_llm/mcp"
-        MCP.attach(self, RubyLLM::MCP.add_client(name: name.to_s, **options))
-      end
+      # The server opens on the first generate, not at class load.
+      def mcp(name, **options) = MCP.defer(self, name, options)
 
       # A skill directory — a SKILL.md with YAML front matter. Its description
       # joins the agent's capabilities; its body arrives when the model asks.
@@ -181,6 +179,7 @@ module Omakase
 
       running.push(key)
       begin
+        MCP.ensure(self.class)
         Omakase.emit(:generation, agent: self, name:, inputs:)
         value = generation.strategy.call(Request.new(agent: self, generation:, inputs:))
         Omakase.emit(:answer, agent: self, name:, value:)

@@ -18,10 +18,15 @@ module Omakase
     end
 
     def entry(agent_class, name)
-      signature = "#{name}(#{parameters(agent_class.instance_method(name))})"
+      method = agent_class.instance_method(name)
+      signature = "#{name}(#{parameters(method)})"
       # A prompt written as a block needs an instance to read; `describe` it instead.
       prompt = agent_class.generations[name]&.prompt
-      description = agent_class.descriptions[name] || (prompt unless prompt.is_a?(Proc))
+      # Look up on the method's owner so a late attach on a parent still
+      # documents the tool for subclasses created before that generate.
+      owner = method.owner
+      description = (owner.descriptions[name] if owner.respond_to?(:descriptions)) ||
+        (prompt unless prompt.is_a?(Proc))
       description ? "#{signature} — #{description}" : signature
     end
 

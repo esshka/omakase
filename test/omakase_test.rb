@@ -670,6 +670,18 @@ class McpTest < Minitest::Test
     Class.new(Omakase::Agent) { generates :summary }.tap { |klass| Omakase::MCP.attach(klass, client(tool)) }
   end
 
+  def lazy_class
+    Class.new(Omakase::Agent) do
+      strategy :predict
+      mcp :files, transport_type: :stdio, config: {}
+      generates :summary
+    end
+  end
+
+  def summarize(klass)
+    klass.new(chat: FakeChat.new { {"result" => "ok"} }).summary
+  end
+
   def test_a_tool_becomes_a_method_the_generated_code_can_call
     agent = agent_with(tool).new
 
@@ -689,6 +701,23 @@ class McpTest < Minitest::Test
     assert_match(/already has #read_file/, error.message)
   end
 
+  def test_a_partial_attach_does_not_leave_methods
+    closed = false
+    first = tool
+    clash = tool(name: "summary")
+    client = Object.new
+    client.define_singleton_method(:tools) { [first, clash] }
+    client.define_singleton_method(:close) { closed = true }
+
+    klass = Class.new(Omakase::Agent) { generates :summary }
+    error = assert_raises(Omakase::Error) { Omakase::MCP.attach(klass, client) }
+
+    assert_match(/already has #summary/, error.message)
+    refute_includes klass.instance_methods(false), :read_file
+    refute klass.descriptions.key?(:read_file)
+    assert closed
+  end
+
   def test_arguments_the_model_left_out_are_not_sent
     agent = agent_with(tool(outcome: ->(arguments) { arguments.keys.inspect })).new
 
@@ -701,6 +730,174 @@ class McpTest < Minitest::Test
     observation = Omakase::Executor.call(agent, %(read_file(path: "nope")))
 
     assert_includes observation, "Omakase::Error: no such file"
+  end
+
+  def teardown = Omakase::MCP.client_factory = nil
+
+  def test_declaring_mcp_does_not_connect
+    called = false
+    Omakase::MCP.client_factory = ->(*) {
+      called = true
+      client(tool)
+    }
+
+    klass = Class.new(Omakase::Agent) do
+      mcp :files, transport_type: :stdio, config: {}
+      generates :summary
+    end
+
+    refute called
+    refute_includes klass.instance_methods(false), :read_file
+    refute_includes Omakase::Capabilities.names(klass), :read_file
+  end
+
+  def test_the_client_factory_must_answer_call
+    error = assert_raises(Omakase::Error) { Omakase::MCP.client_factory = 42 }
+    assert_equal "client_factory must answer call, got Integer", error.message
+  end
+
+  def test_the_first_generate_connects_and_defines_the_methods
+    calls = []
+    Omakase::MCP.client_factory = ->(name, **options) {
+      calls << [name, options]
+      client(tool)
+    }
+    klass = lazy_class
+
+    assert_equal "ok", summarize(klass)
+    assert_equal [[:files, {transport_type: :stdio, config: {}}]], calls
+    assert_equal "contents of /tmp/a.txt", klass.new.read_file(path: "/tmp/a.txt")
+    assert_includes Omakase::Capabilities.of(klass, except: :summary).first, "read_file"
+  end
+
+  def test_a_later_generate_does_not_connect_again
+    calls = 0
+    Omakase::MCP.client_factory = ->(*) {
+      calls += 1
+      client(tool)
+    }
+    klass = lazy_class
+
+    2.times { summarize(klass) }
+
+    assert_equal 1, calls
+  end
+
+  def test_a_generate_without_mcp_does_not_wait_for_another_class_to_connect
+    started = Queue.new
+    release = Queue.new
+    Omakase::MCP.client_factory = ->(*) {
+      started << true
+      release.pop
+      client(tool)
+    }
+    mcp_klass = lazy_class
+    plain = Class.new(Omakase::Agent) do
+      strategy :predict
+      generates :summary
+    end
+
+    waiter = Thread.new { summarize(mcp_klass) }
+    started.pop
+    assert_equal "ok", summarize(plain)
+    release << true
+    waiter.join
+  end
+
+  def test_a_server_declared_after_a_generate_attaches_on_the_next
+    calls = 0
+    Omakase::MCP.client_factory = ->(*) {
+      calls += 1
+      client(tool)
+    }
+    klass = Class.new(Omakase::Agent) do
+      strategy :predict
+      generates :summary
+    end
+
+    summarize(klass)
+    assert_equal 0, calls
+
+    klass.mcp :files, transport_type: :stdio, config: {}
+    summarize(klass)
+
+    assert_equal 1, calls
+    assert klass.method_defined?(:read_file)
+  end
+
+  def test_a_deferred_tool_that_shadows_is_refused_on_first_generate
+    Omakase::MCP.client_factory = ->(*) { client(tool) }
+    klass = Class.new(Omakase::Agent) do
+      strategy :predict
+      def read_file(path) = path
+      mcp :files, transport_type: :stdio, config: {}
+      generates :summary
+    end
+
+    error = assert_raises(Omakase::Error) { summarize(klass) }
+    assert_match(/already has #read_file/, error.message)
+  end
+
+  def test_a_failed_connect_is_retried_on_the_next_generate
+    attempts = 0
+    Omakase::MCP.client_factory = ->(*) {
+      attempts += 1
+      raise Omakase::Error, "down" if attempts == 1
+      client(tool)
+    }
+    klass = lazy_class
+
+    assert_equal "ok", summarize(klass)
+    refute_includes klass.instance_methods(false), :read_file
+
+    assert_equal "ok", summarize(klass)
+    assert_equal 2, attempts
+    assert klass.method_defined?(:read_file)
+  end
+
+  def test_a_down_server_does_not_block_a_sibling
+    calls = Hash.new(0)
+    Omakase::MCP.client_factory = ->(name, **) {
+      calls[name] += 1
+      raise Omakase::Error, "down" if name == :files && calls[name] == 1
+
+      client(tool(name: (name == :files) ? "read-file" : "list-dir"))
+    }
+    klass = Class.new(Omakase::Agent) do
+      strategy :predict
+      mcp :files, transport_type: :stdio, config: {}
+      mcp :also, transport_type: :stdio, config: {}
+      generates :summary
+    end
+
+    assert_equal "ok", summarize(klass)
+    refute klass.method_defined?(:read_file)
+    assert klass.method_defined?(:list_dir)
+
+    assert_equal "ok", summarize(klass)
+    assert klass.method_defined?(:read_file)
+  end
+
+  def test_a_subclass_generate_attaches_the_parent_servers_on_the_parent
+    Omakase::MCP.client_factory = ->(*) { client(tool) }
+    parent = lazy_class
+    child = Class.new(parent)
+
+    summarize(child)
+
+    assert_includes parent.instance_methods(false), :read_file
+    refute_includes child.instance_methods(false), :read_file
+    assert_equal "contents of /tmp/a.txt", child.new.read_file(path: "/tmp/a.txt")
+    assert_includes Omakase::Capabilities.of(child, except: :summary).first, "Arguments — path: string (required)"
+  end
+
+  def test_a_child_server_that_reuses_a_parent_tool_name_is_refused
+    Omakase::MCP.client_factory = ->(*) { client(tool) }
+    parent = lazy_class
+    child = Class.new(parent) { mcp :also, transport_type: :stdio, config: {} }
+
+    error = assert_raises(Omakase::Error) { summarize(child) }
+    assert_match(/already has #read_file/, error.message)
   end
 end
 

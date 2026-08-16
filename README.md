@@ -300,13 +300,13 @@ class DocsAgent < ApplicationAgent
 end
 ```
 
-The connection opens when the class is defined and the tools are read from the server then, so a
+The connection opens on the first generate and the tools are read from the server then, so a
 tool's arguments reach the model as documentation. A failed call raises, which the model sees and
 can correct. Only text comes back: an image or audio result is dropped.
 
-That it happens at class-definition time has a cost worth knowing: under `config.eager_load = true`
-an unreachable server fails the boot, and every reload in development reconnects. If a deploy must
-not wait on a sidecar, keep MCP agents out of the eager-loaded paths.
+Class load does not talk to the server, so an unreachable sidecar does not fail boot, and a reload
+does not reconnect. The first generate pays that cost; if the server is down, its tools are absent
+and the generate still runs. The next generate tries that server again.
 
 ### Skills
 
