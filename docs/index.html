@@ -588,8 +588,8 @@ generates <span class="y">:write</span>, <span class="s">"Write a post about the
       <p class="note" style="margin-top:1.4rem">
         <strong>One rule.</strong> Generated code runs with <code>instance_eval</code> in your process,
         where <code>ActiveRecord</code> and <code>ENV</code> live. Untrusted input belongs to
-        <code>:predict</code>; <code>:code_act</code> is for work you control — or swap in your own
-        isolated executor.
+        <code>:predict</code>; <code>:code_act</code> is for work you control — or swap in
+        <code>Omakase::Executor::Subprocess</code>.
       </p>
     </div>
   </div>

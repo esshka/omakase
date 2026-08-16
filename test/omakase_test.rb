@@ -420,6 +420,76 @@ class ReliabilityTest < Minitest::Test
   end
 end
 
+class SubprocessExecutorTest < Minitest::Test
+  def setup
+    skip "Process.fork is not available" unless Process.respond_to?(:fork)
+    @agent = InventoryAgent.new({"apple" => 3})
+  end
+
+  def call(code, timeout: 1) = Omakase::Executor::Subprocess.call(@agent, code, timeout:)
+
+  def test_finish_answers_with_the_computed_value
+    answer = call("finish(stock_of('apple') + 1)")
+
+    assert_equal 4, answer.value
+  end
+
+  def test_what_was_printed_before_finish_crosses_the_boundary
+    answer = call(%(puts "looked it up"\nfinish(3)))
+
+    assert_equal 3, answer.value
+    assert_equal "looked it up", answer.printed
+  end
+
+  def test_state_written_in_the_child_is_kept
+    call("@stock['apple'] = 9; finish(true)")
+
+    assert_equal 9, @agent.stock_of("apple")
+  end
+
+  def test_it_plugs_into_the_tool_loop_across_calls
+    chat = FakeChat.new do |fake|
+      fake.run("@n = stock_of('apple')")
+      fake.run("finish(@n + 1)")
+      "done"
+    end
+    Omakase.executor = Omakase::Executor::Subprocess
+
+    assert_equal 4, InventoryAgent.new({"apple" => 3}, chat:).total_stock(items: [])
+  ensure
+    Omakase.executor = nil
+  end
+
+  def test_a_timeout_is_an_observation_in_the_parent
+    observation = call("sleep 5", timeout: 0.05)
+
+    assert_kind_of String, observation
+    assert_match(/Timeout::Error|timed out/, observation)
+    assert_equal 3, @agent.stock_of("apple")
+  end
+
+  def test_a_child_that_dies_is_an_observation
+    observation = call("Process.exit!(9)")
+
+    assert_kind_of String, observation
+    assert_match(/child process/, observation)
+  end
+
+  def test_an_unmarshallable_answer_is_an_observation
+    observation = call("finish(-> {})")
+
+    assert_kind_of String, observation
+    assert_match(/process boundary/, observation)
+  end
+
+  def test_a_failing_line_is_named_so_the_model_can_fix_it
+    observation = call("stock_of\n")
+
+    assert_match(/ArgumentError/, observation)
+    assert_includes observation, "line 1: stock_of"
+  end
+end
+
 class DslTest < Minitest::Test
   def test_the_method_name_is_the_prompt_when_none_is_given
     assert_equal "Analyze.", FeedbackAgent.generations[:analyze].prompt
