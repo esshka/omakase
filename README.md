@@ -1,4 +1,4 @@
-# Omakase
+# Omakase Agents
 
 A light agent framework — about 800 lines of library. *Omakase* (お任せ): you name what you want,
 the rest is left to the chef.

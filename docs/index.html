@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Omakase — agents as plain Ruby objects</title>
+<title>Omakase Agents — an agent is a plain Ruby object</title>
 <meta name="description" content="A light Ruby agent framework, at home in Rails. An agent is an object: the methods you declare without a body are written by the model at runtime.">
 <meta name="theme-color" content="#f7f4ee" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#12100e" media="(prefers-color-scheme: dark)">
-<meta property="og:title" content="Omakase — agents as plain Ruby objects">
+<meta property="og:title" content="Omakase Agents — an agent is a plain Ruby object">
 <meta property="og:description" content="Declare a method without a body; the model writes it at runtime. ~800 lines on top of RubyLLM, and they live in app/agents.">
 <meta property="og:url" content="https://esshka.github.io/omakase/">
 <meta property="og:type" content="website">
@@ -120,6 +120,14 @@ h1 {
   font-size: clamp(3.6rem, 13vw, 9.5rem);
   line-height: 0.86;
   letter-spacing: -0.035em;
+}
+
+h1 small {
+  display: block;
+  margin-top: 0.12em;
+  font-size: 0.3em;
+  letter-spacing: -0.015em;
+  color: var(--muted);
 }
 
 h1 em {
@@ -358,7 +366,7 @@ footer a:hover { color: var(--shu); border-color: var(--shu); }
 
   <div class="hero">
     <div>
-      <h1 class="rise">Omak<em>a</em>se</h1>
+      <h1 class="rise">Omak<em>a</em>se <small>Agents</small></h1>
       <div class="kana">お任せ</div>
     </div>
     <div class="stamp">任</div>
