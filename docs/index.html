@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Omakase — agents as plain Ruby objects</title>
-<meta name="description" content="A light Ruby agent framework. An agent is an object: the methods you declare without a body are written by the model at runtime.">
+<meta name="description" content="A light Ruby agent framework, at home in Rails. An agent is an object: the methods you declare without a body are written by the model at runtime.">
 <meta name="theme-color" content="#f7f4ee" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#12100e" media="(prefers-color-scheme: dark)">
 <meta property="og:title" content="Omakase — agents as plain Ruby objects">
-<meta property="og:description" content="Declare a method without a body; the model writes it at runtime. ~800 lines on top of RubyLLM.">
+<meta property="og:description" content="Declare a method without a body; the model writes it at runtime. ~800 lines on top of RubyLLM, and they live in app/agents.">
 <meta property="og:url" content="https://esshka.github.io/omakase/">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://esshka.github.io/omakase/og.png">
@@ -521,10 +521,64 @@ Omakase.configure <span class="k">do</span> |config|
   <span class="k">def</span> perform(ticket) = ticket.update!(SupportAgent.triage(message: ticket.body))
 <span class="k">end</span></code></pre>
       <p class="note" style="margin-top:1.4rem">
+        <strong>Your validations are the contract.</strong> A <code>returns:</code> class that answers
+        <code>valid?</code> is asked before the answer is handed back, so a generation cannot return a
+        record your own rules reject — and none of those rules has to be in the prompt.
+      </p>
+<pre><code><span class="k">class</span> Post <span class="o">&lt;</span> ApplicationRecord
+  validates <span class="y">:slug</span>, length: {maximum: <span class="y">12</span>}
+<span class="k">end</span>
+
+generates <span class="y">:write</span>, <span class="s">"Write a post about the topic."</span>, returns: Post
+<span class="c"># =&gt; finish rejected: Post is invalid: Slug is too long (maximum is 12 characters)</span>
+<span class="c">#    and it corrects itself inside the same loop, within its call budget</span></code></pre>
+      <div class="two">
+        <div>
+          <h3>many pods</h3>
+          <p>Identity is a row, state is your tables, and the agent is a value — built for one turn and
+          thrown away. Multi-turn is <code>context</code> reading the history back, so any pod serves
+          any turn.</p>
+        </div>
+        <div>
+          <h3>the console</h3>
+          <p><code>rails console</code> is already the harness: <code>SupportAgent.new(conversation).reply</code>
+          is one real generation, and every tool is an ordinary method you can call with no model in the
+          room.</p>
+        </div>
+      </div>
+      <p class="note" style="margin-top:1.4rem">
         <strong>One rule.</strong> Generated code runs with <code>instance_eval</code> in your process,
         where <code>ActiveRecord</code> and <code>ENV</code> live. Untrusted input belongs to
         <code>:predict</code>; <code>:code_act</code> is for work you control — or swap in your own
         isolated executor.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="course">
+    <div class="numeral">陸<small>test</small></div>
+    <div>
+      <h2>The suite stays offline</h2>
+      <p class="note">
+        An agent takes any object that quacks like a chat, and one ships with the library — so a test
+        builds the agent and calls the method, with no network and no cassettes. The class-level call a
+        job makes has no seam to inject through; <code>chat_factory</code> is that seam.
+      </p>
+<pre><code>chat = Omakase::FakeChat.new { {<span class="s">"severity"</span> =&gt; <span class="s">"high"</span>} }
+assert_equal <span class="s">"high"</span>, SupportAgent.new(chat:).triage(message: <span class="s">"broken"</span>)[<span class="y">:severity</span>]
+
+<span class="c"># or drive the one tool the way a model would</span>
+chat = Omakase::FakeChat.new { |fake| fake.run(<span class="s">"finish(stock_of(:apple))"</span>) }
+
+<span class="c"># test/test_helper.rb — and the whole suite is off the network</span>
+Omakase.chat_factory = -&gt;(**) { Omakase::FakeChat.new { raise <span class="s">"an agent asked for a model"</span> } }</code></pre>
+      <p class="note" style="margin-top:1.4rem">
+        The fake records <code>instructions</code>, <code>schema</code>, <code>tools</code> and
+        <code>tasks</code>, so the prompt is assertable too. Make the factory raise, and a generation you
+        forgot to stub fails loudly instead of quietly calling a provider from CI — an injected
+        <code>chat:</code> still wins.
       </p>
     </div>
   </div>
@@ -558,7 +612,7 @@ Omakase.configure <span class="k">do</span> |config|
 
 <section class="wrap">
   <div class="course">
-    <div class="numeral">陸<small>serve</small></div>
+    <div class="numeral">漆<small>serve</small></div>
     <div>
       <h2>Install</h2>
       <p class="note">
