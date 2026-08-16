@@ -503,7 +503,38 @@ generates <span class="y">:analyze</span>, <span class="s">"Analyze the feedback
 
 <section class="wrap">
   <div class="course">
-    <div class="numeral">伍<small>rails</small></div>
+    <div class="numeral">伍<small>compose</small></div>
+    <div>
+      <h2>The recursion is in the data</h2>
+      <p class="note">
+        Some work is a tree, and the tree is usually already in your database — a comment thread, a
+        category tree, a bill of materials. One agent per node folds it from the leaves up, and the
+        base case is a node with no children, so nothing has to invent how deep to go.
+      </p>
+<pre><code><span class="k">class</span> ThreadAgent <span class="o">&lt;</span> ApplicationAgent
+  instructions <span class="s">"You sum up a discussion for someone who has not read it."</span>
+
+  <span class="k">def</span> roll_up
+    <span class="k">return</span> said <span class="k">if</span> @comment.replies.empty?          <span class="c"># a leaf is its own summary</span>
+
+    summarise(comment: said, replies: @comment.replies.map { |reply| self.class.new(reply).roll_up })
+  <span class="k">end</span>
+
+  generates <span class="y">:summarise</span>, <span class="s">"Sum up this comment together with the replies it drew."</span>, returns: <span class="y">:string</span>
+<span class="k">end</span></code></pre>
+      <p class="note" style="margin-top:1.4rem">
+        The model is asked only where there is something to fold. A fresh agent per branch is not
+        ceremony either: siblings then share no state, and one object may not re-enter a generation it
+        is already inside — that is refused, because a nested run opens its own chat with its own tool
+        budget, and nothing would bound the spend. Generated code can start a sub-agent the same way.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <div class="course">
+    <div class="numeral">陸<small>rails</small></div>
     <div>
       <h2>At home in Rails</h2>
       <p class="note">
@@ -558,7 +589,7 @@ generates <span class="y">:write</span>, <span class="s">"Write a post about the
 
 <section class="wrap">
   <div class="course">
-    <div class="numeral">陸<small>test</small></div>
+    <div class="numeral">漆<small>test</small></div>
     <div>
       <h2>The suite stays offline</h2>
       <p class="note">
@@ -612,7 +643,7 @@ Omakase.chat_factory = -&gt;(**) { Omakase::FakeChat.new { raise <span class="s"
 
 <section class="wrap">
   <div class="course">
-    <div class="numeral">漆<small>serve</small></div>
+    <div class="numeral">捌<small>serve</small></div>
     <div>
       <h2>Install</h2>
       <p class="note">
