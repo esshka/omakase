@@ -3,6 +3,48 @@
 One entry per released version, written when the gem is pushed. Until `1.0`, a minor version may
 move the API — what breaks is listed first, so an upgrade is a decision rather than a surprise.
 
+## 0.3.0
+
+One thing changes under you: a generation may no longer call itself. The rest is additions — a real
+signature for the inputs, a trace to read a run by, a seam for the chat, and your own validations
+enforced on the way out.
+
+### Breaking
+
+- A generation may not re-enter itself. While `SupportAgent#reply` is running on an object, that
+  object's `reply` raises `Omakase::Error` instead of opening a second run. Generated code can see
+  the method and call it, and each nested call opened its own chat with its own tool budget — so the
+  budget bounded nothing. A *fresh* agent may still recurse: that is the sub-agents pattern, one
+  object per node of a tree, and the tree is the thing that ends.
+
+### Added
+
+- `takes:` names the keyword arguments, and then Ruby checks them:
+  `generates :translate, takes: %i[text language]`. A missing or misspelled argument is an
+  `ArgumentError` at the call rather than noise in a prompt, and the model reads the names instead
+  of `**inputs`. `with:` stays available for attachments. Anything that is not a plain keyword name
+  is refused where it is declared.
+- `Omakase::Trace` — the listener printed for a human: `Omakase.listener = Omakase::Trace.new`. A run
+  reads top to bottom: the call, the code the model wrote, the answer. Colour when the stream is a
+  terminal, plain when it is a log.
+- `Omakase.chat_factory` — how an agent gets a chat when none was injected. One line in
+  `test_helper.rb` keeps a whole suite off the network, including the class-level calls a job makes,
+  which have no seam to inject through. Anything answering `call(**options)` will do, and an
+  injected `chat:` still wins.
+- A `returns:` class that answers `valid?` and `errors` — which is every ActiveModel — is asked
+  before the answer is handed back, and an invalid one is refused. Under `:code_act` the refusal
+  reaches the model as `finish rejected: Post is invalid: …`, and it corrects itself inside the same
+  loop. Your validations are the contract, and they stay where you wrote them.
+- `doc(object)` takes a class as well as an instance: what an object of that type would offer, plus
+  the column names when it is a record. The model asks before it builds a type it has only been told
+  the name of.
+
+### Fixed
+
+- What generated code printed before `finish` is no longer lost — `Executor::Answer` carries it, so a
+  trace shows the working and not only the answer. `printed:` defaults, so a replacement executor
+  that knows the value alone still satisfies the seam.
+
 ## 0.2.0
 
 Nothing breaks. Four additions, each one a keyword or a seam that costs nothing when unused.
