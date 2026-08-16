@@ -639,6 +639,18 @@ them. The second turn answers from the first because the history is a table, not
 Marshal-into-a-column is the escape hatch for resuming a run mid-flight, not the default: rows can
 be queried and migrated, blobs cannot.
 
+**The console.** An agent is a plain object, so `rails console` is already the harness:
+
+```ruby
+agent = SupportAgent.new(Conversation.find(42))
+agent.context    # exactly what the model will read
+agent.reply      # one real generation, right here
+```
+
+The same value the job builds, built by hand — and every tool is an ordinary method, so
+`agent.refund!(order_id, 20)` runs with no model in the room. Nothing to boot, nothing to mock: the
+console session that debugs your models debugs your agents.
+
 **Errors.** Everything raised at the boundary is an `Omakase::Error`:
 
 | | |
