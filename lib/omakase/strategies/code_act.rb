@@ -34,6 +34,7 @@ module Omakase
           #{capabilities(request).join("\n")}
 
           `doc(object)` prints what an object of an unfamiliar type offers; a class works too.
+          `how_to_act` is the rest, with examples — call it once before you write code.
 
           Return the answer from inside the code, never as a message — the last thing you run is:
 

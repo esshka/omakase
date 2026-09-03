@@ -31,8 +31,15 @@ module Omakase
 
       # An MCP server's tools, as methods on the agent. Options are passed to
       # `ruby_llm-mcp` verbatim: `mcp :files, transport_type: :stdio, config: {command: "npx", …}`.
-      # The server opens on the first generate, not at class load.
+      # The server opens on the first instance, not at class load.
       def mcp(name, **options) = MCP.defer(self, name, options)
+
+      # Here rather than in `initialize`, which a subclass may override and
+      # never call super from — and then generate with none of its tools.
+      def new(...)
+        MCP.ensure(self)
+        super
+      end
 
       # A skill directory — a SKILL.md with YAML front matter. Its description
       # joins the agent's capabilities; its body arrives when the model asks.
@@ -122,6 +129,7 @@ module Omakase
         subclass.strategy(@strategy) if @strategy
         subclass.generations.merge!(generations)
         subclass.descriptions.merge!(descriptions)
+        Skills.attach_core(subclass)
       end
     end
 
@@ -179,7 +187,6 @@ module Omakase
 
       running.push(key)
       begin
-        MCP.ensure(self.class)
         Omakase.emit(:generation, agent: self, name:, inputs:)
         value = generation.strategy.call(Request.new(agent: self, generation:, inputs:))
         Omakase.emit(:answer, agent: self, name:, value:)

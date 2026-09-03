@@ -300,13 +300,13 @@ class DocsAgent < ApplicationAgent
 end
 ```
 
-The connection opens on the first generate and the tools are read from the server then, so a
+The connection opens on the first instance and the tools are read from the server then, so a
 tool's arguments reach the model as documentation. A failed call raises, which the model sees and
 can correct. Only text comes back: an image or audio result is dropped.
 
 Class load does not talk to the server, so an unreachable sidecar does not fail boot, and a reload
-does not reconnect. The first generate pays that cost; if the server is down, its tools are absent
-and the generate still runs. The next generate tries that server again.
+does not reconnect. The first instance pays that cost; if the server is down, its tools are absent
+and the generate still runs. The next instance tries that server again.
 
 ### Skills
 
@@ -330,6 +330,10 @@ That is the whole of “loaded on demand”: the one-line description is in the 
 reaches the model if the generated code calls `commit_style`. Anything else the skill ships —
 scripts, templates — sits in the same directory, and the body ends with its path, so generated Ruby
 can read or run it.
+
+Every agent already has one: `how_to_act`. It is how to write the Ruby that implements a
+generation — `finish`, prints, `doc`, ivars — with examples. The description sits in the capability
+list; the body arrives when the model calls it.
 
 ### Remembering
 
@@ -788,11 +792,12 @@ What is bounded: ten tool calls per generation, one run of a generation at a tim
 timeout per execution, and 4KB of observation. The default executor uses Ruby's `Timeout` in this
 process — inside a database driver it can leave the connection unusable.
 `Omakase::Executor::Subprocess` is the reference swap: the same `instance_eval`, in a child process,
-so a timeout or a crash takes the child and not you. Ivars written in the child are marshalled back
-(a generation is several tool calls); methods the model defined on the object die with the child.
-The child is a copy of this process, so it can still reach ActiveRecord, ENV, and the disk — that is
-isolation of fate, not of capability. Untrusted input still belongs to `:predict`. Do not use it from
-a threaded server; run the generation in a job.
+so a timeout or a crash takes the child and not you. Ivars come back one at a time, so one Proc
+does not drop the rest; methods the model defined on the object die with the child. The child is a
+copy of this process, so it can still reach ActiveRecord, ENV, and the disk — that is isolation of
+fate, not of capability. Untrusted input still belongs to `:predict`. Do not use it from a threaded
+server; run the generation in a job. Do not call MCP tools under it: the child would share the
+parent's stdio client.
 
 ```ruby
 Omakase.executor = Omakase::Executor::Subprocess

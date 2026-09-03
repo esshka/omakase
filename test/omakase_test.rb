@@ -313,6 +313,13 @@ class ReliabilityTest < Minitest::Test
     assert_match(/Timeout::Error/, observation)
   end
 
+  def test_a_syntax_error_has_no_line_to_point_at
+    observation = Omakase::Executor.call(@agent, "def")
+
+    assert_match(/SyntaxError/, observation)
+    refute_match(/^line \d+:/, observation)
+  end
+
   def test_what_was_printed_before_finish_is_not_lost
     answer = Omakase::Executor.call(@agent, %(puts "looked it up"\nfinish(3)))
 
@@ -463,9 +470,47 @@ class SubprocessExecutorTest < Minitest::Test
   def test_a_timeout_is_an_observation_in_the_parent
     observation = call("sleep 5", timeout: 0.05)
 
-    assert_kind_of String, observation
-    assert_match(/Timeout::Error|timed out/, observation)
+    assert_equal "execution timed out", observation
     assert_equal 3, @agent.stock_of("apple")
+  end
+
+  def test_a_grandchild_holding_the_pipe_does_not_block_the_parent
+    Dir.mktmpdir do |dir|
+      pid_file = File.join(dir, "pid")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      answer = call("File.write(#{pid_file.inspect}, Process.fork { sleep 60 }); finish(1)", timeout: 2)
+
+      assert_equal 1, answer.value
+      assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 5
+      Process.kill("KILL", Integer(File.read(pid_file)))
+    end
+  end
+
+  def test_a_bad_ivar_does_not_drop_the_rest
+    observation = call("@stock['apple'] = 9; @probe = -> {}; finish(true)")
+
+    assert_equal 9, @agent.stock_of("apple")
+    assert_match(/@probe/, observation)
+    assert_match(/process boundary/, observation)
+  end
+
+  def test_a_timeout_kills_the_grandchild
+    Dir.mktmpdir do |dir|
+      pid_file = File.join(dir, "pid")
+      call("File.write(#{pid_file.inspect}, Process.fork { sleep 60 }); sleep 5", timeout: 0.1)
+      grandchild = Integer(File.read(pid_file))
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 1
+      sleep 0.01 while living?(grandchild) && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+
+      refute living?(grandchild)
+    end
+  end
+
+  def living?(pid)
+    Process.kill(0, pid)
+    true
+  rescue Errno::ESRCH
+    false
   end
 
   def test_a_child_that_dies_is_an_observation
@@ -487,6 +532,108 @@ class SubprocessExecutorTest < Minitest::Test
 
     assert_match(/ArgumentError/, observation)
     assert_includes observation, "line 1: stock_of"
+  end
+
+  # A pipe holds ~64KB; more than that is several writes and several reads.
+  def test_state_larger_than_the_pipe_buffer_comes_back_whole
+    call("@stock['bulk'] = 'x' * 200_000; finish(true)")
+
+    assert_equal 200_000, @agent.stock_of("bulk").length
+  end
+
+  def test_an_answer_that_cannot_cross_still_brings_the_state_back
+    observation = call("@stock['apple'] = 9; finish(-> {})")
+
+    assert_match(/process boundary/, observation)
+    assert_equal 9, @agent.stock_of("apple")
+  end
+
+  def test_output_past_the_cap_is_truncated_before_it_crosses
+    observation = call("puts('x' * 10_000)")
+
+    assert_includes observation, "(truncated)"
+    assert_operator observation.length, :<, 5_000
+  end
+
+  def test_concurrent_calls_do_not_cross_wires
+    agents = Array.new(4) { |i| InventoryAgent.new({"apple" => i}) }
+
+    answers = agents.map { |agent|
+      Thread.new { Omakase::Executor::Subprocess.call(agent, "finish(stock_of('apple'))", timeout: 5) }
+    }.map { |thread| thread.value.value }
+
+    assert_equal [0, 1, 2, 3], answers
+  end
+
+  def test_a_child_killed_outright_says_so
+    observation = call("Process.kill('KILL', Process.pid)")
+
+    assert_equal "child process was killed", observation
+  end
+
+  def test_a_child_that_leaves_without_answering_says_so
+    observation = call("exit 0")
+
+    assert_equal "child process ended without an answer", observation
+  end
+
+  def test_a_timed_out_child_is_reaped
+    Dir.mktmpdir do |dir|
+      pid_file = File.join(dir, "pid")
+      call("File.write(#{pid_file.inspect}, Process.pid)\nsleep 5", timeout: 0.3)
+      child = Integer(File.read(pid_file))
+
+      refute living?(child)
+      assert_raises(Errno::ECHILD) { Process.waitpid(child) }
+    end
+  end
+
+  def test_a_bad_ivar_is_reported_next_to_the_error_that_came_with_it
+    observation = call("@probe = -> {}; raise 'boom'")
+
+    assert_match(/RuntimeError: boom/, observation)
+    assert_match(/@probe/, observation)
+  end
+
+  def test_a_class_defined_in_the_child_cannot_come_back
+    observation = call("Object.const_set(:Ephemeral, Class.new); @stock['apple'] = Ephemeral.new; finish(1)")
+
+    assert_kind_of String, observation
+    assert_match(/Ephemeral/, observation)
+    assert_match(/process boundary/, observation)
+    refute Object.const_defined?(:Ephemeral)
+  end
+
+  # setsid never ran, so the child is no group leader: kill the pid, not the group.
+  def test_a_timeout_still_kills_a_child_that_is_not_a_group_leader
+    Dir.mktmpdir do |dir|
+      pid_file = File.join(dir, "pid")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      observation = without_setsid { call("File.write(#{pid_file.inspect}, Process.pid)\nsleep 5", timeout: 0.3) }
+
+      assert_equal "execution timed out", observation
+      assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 3
+      refute living?(Integer(File.read(pid_file)))
+    end
+  end
+
+  def without_setsid
+    meta = Process.singleton_class
+    meta.alias_method(:real_setsid, :setsid)
+    meta.remove_method(:setsid)
+    meta.define_method(:setsid) { nil }
+    yield
+  ensure
+    meta.remove_method(:setsid)
+    meta.alias_method(:setsid, :real_setsid)
+  end
+
+  def test_a_child_that_is_already_gone_is_nothing_to_stop_or_reap
+    pid = fork { exit! 0 }
+    Process.wait(pid)
+
+    assert_nil Omakase::Executor::Subprocess.stop(pid)
+    assert_nil Omakase::Executor::Subprocess.reap(pid)
   end
 end
 
@@ -526,7 +673,7 @@ class DslTest < Minitest::Test
     assert_equal "refunded", agent_class.new(chat:).decide(email: "ada@example.com", complaint: "cracked")
     assert_raises(ArgumentError) { agent_class.new(chat:).decide(email: "ada@example.com") }
     assert_raises(ArgumentError) { agent_class.new(chat:).decide(email: "a", complaint: "b", emial: "typo") }
-    assert_equal "decide(email:, complaint:, with:) — Decide.", Omakase::Capabilities.of(agent_class).first
+    assert_includes Omakase::Capabilities.of(agent_class), "decide(email:, complaint:, with:) — Decide."
   end
 
   def test_named_inputs_that_are_not_identifiers_are_refused_where_they_are_declared
@@ -689,7 +836,7 @@ class McpTest < Minitest::Test
   end
 
   def test_the_capability_line_carries_the_description_and_the_arguments
-    entry = Omakase::Capabilities.of(agent_with(tool), except: :summary).first
+    entry = Omakase::Capabilities.of(agent_with(tool), except: :summary).grep(/\Aread_file/).first
 
     assert_equal "read_file(**arguments) — Read a file from disk. Arguments — path: string (required)", entry
   end
@@ -767,7 +914,7 @@ class McpTest < Minitest::Test
     assert_equal "ok", summarize(klass)
     assert_equal [[:files, {transport_type: :stdio, config: {}}]], calls
     assert_equal "contents of /tmp/a.txt", klass.new.read_file(path: "/tmp/a.txt")
-    assert_includes Omakase::Capabilities.of(klass, except: :summary).first, "read_file"
+    assert Omakase::Capabilities.of(klass, except: :summary).grep(/\Aread_file/).first
   end
 
   def test_a_later_generate_does_not_connect_again
@@ -888,7 +1035,111 @@ class McpTest < Minitest::Test
     assert_includes parent.instance_methods(false), :read_file
     refute_includes child.instance_methods(false), :read_file
     assert_equal "contents of /tmp/a.txt", child.new.read_file(path: "/tmp/a.txt")
-    assert_includes Omakase::Capabilities.of(child, except: :summary).first, "Arguments — path: string (required)"
+    assert_includes Omakase::Capabilities.of(child, except: :summary).grep(/\Aread_file/).first,
+      "Arguments — path: string (required)"
+  end
+
+  def test_an_instance_connects_without_a_generate
+    Omakase::MCP.client_factory = ->(*) { client(tool) }
+
+    assert_equal "contents of /tmp/a.txt", lazy_class.new.read_file(path: "/tmp/a.txt")
+  end
+
+  def test_a_failed_connect_is_emitted
+    events = []
+    Omakase.listener = ->(event, **) { events << event }
+    Omakase::MCP.client_factory = ->(*) { raise Omakase::Error, "down" }
+
+    summarize(lazy_class)
+
+    assert_includes events, :mcp
+  ensure
+    Omakase.listener = nil
+  end
+
+  def test_a_server_that_connects_but_cannot_list_its_tools_is_skipped
+    broken = Object.new
+    broken.define_singleton_method(:tools) { raise IOError, "no reply" }
+    Omakase::MCP.client_factory = ->(*) { broken }
+
+    assert_equal "ok", summarize(lazy_class)
+  end
+
+  def test_a_script_error_is_not_treated_as_a_down_server
+    Omakase::MCP.client_factory = ->(*) { raise LoadError, "no gem" }
+
+    assert_raises(LoadError) { summarize(lazy_class) }
+  end
+
+  def test_two_classes_connect_without_waiting_for_each_other
+    entered = Queue.new
+    gate = Queue.new
+    Omakase::MCP.client_factory = ->(name, **) {
+      entered << name
+      gate.pop
+      client(tool(name: "read-#{name}"))
+    }
+    one = Class.new(Omakase::Agent) do
+      strategy :predict
+      mcp :one, transport_type: :stdio, config: {}
+      generates :summary
+    end
+    two = Class.new(Omakase::Agent) do
+      strategy :predict
+      mcp :two, transport_type: :stdio, config: {}
+      generates :summary
+    end
+
+    threads = [Thread.new { summarize(one) }, Thread.new { summarize(two) }]
+    assert entered.pop(timeout: 1), "first class never reached the factory"
+    assert entered.pop(timeout: 1), "the other class waited for this connect to finish"
+    2.times { gate << true }
+    threads.each(&:join)
+  end
+
+  def test_one_class_under_two_threads_connects_once
+    calls = 0
+    ready = Queue.new
+    Omakase::MCP.client_factory = ->(*) {
+      calls += 1
+      sleep 0.05
+      client(tool)
+    }
+    klass = lazy_class
+
+    threads = Array.new(2) { Thread.new { ready.pop && klass.new } }
+    2.times { ready << true }
+    threads.each(&:join)
+
+    assert_equal 1, calls
+  end
+
+  def test_an_initialize_that_forgets_super_still_gets_its_tools
+    Omakase::MCP.client_factory = ->(*) { client(tool) }
+    klass = Class.new(lazy_class) { def initialize(chat: nil) = @chat = chat }
+
+    assert_equal "ok", summarize(klass)
+    assert klass.method_defined?(:read_file)
+  end
+
+  def test_the_listener_says_which_server_went_down_and_why
+    io = StringIO.new
+    Omakase.listener = Omakase::Trace.new(io:)
+    Omakase::MCP.client_factory = ->(*) { raise Omakase::Error, "sidecar down" }
+
+    summarize(lazy_class)
+
+    assert_match(/files/, io.string)
+    assert_match(/sidecar down/, io.string)
+  ensure
+    Omakase.listener = nil
+  end
+
+  def test_a_tool_without_a_schema_is_described_without_arguments
+    entry = Omakase::Capabilities.of(agent_with(tool(params_schema: nil)), except: :summary).grep(/\Aread_file/).first
+
+    assert_includes entry, "Read a file from disk."
+    refute_includes entry, "Arguments"
   end
 
   def test_a_child_server_that_reuses_a_parent_tool_name_is_refused
@@ -922,14 +1173,47 @@ class SkillsTest < Minitest::Test
 
   def test_the_description_is_a_capability_and_the_body_is_what_the_call_returns
     with_skill do |agent|
-      assert_equal ["ruby_style() — How this codebase writes Ruby. Use before editing any .rb file."],
-        Omakase::Capabilities.of(agent)
+      assert_includes Omakase::Capabilities.of(agent),
+        "ruby_style() — How this codebase writes Ruby. Use before editing any .rb file."
       assert_includes agent.new.ruby_style, "Prefer endless methods for one-liners."
     end
   end
 
   def test_the_body_says_where_the_skills_own_files_are
     with_skill { |agent| assert_match(%r{Files for this skill are in .*/ruby-style\.}, agent.new.ruby_style) }
+  end
+
+  def test_every_agent_has_the_core_skill
+    klass = Class.new(Omakase::Agent)
+    entry = Omakase::Capabilities.of(klass).grep(/\Ahow_to_act/).first
+
+    assert_includes entry, "Call once before you act"
+    assert_includes klass.new.how_to_act, "finish"
+    assert_includes klass.new.how_to_act, "doc(orders.first)"
+  end
+
+  def test_a_subclass_does_not_define_the_core_skill_again
+    parent = Class.new(Omakase::Agent)
+    child = Class.new(parent)
+
+    assert_includes parent.instance_methods(false), :how_to_act
+    refute_includes child.instance_methods(false), :how_to_act
+    assert_includes child.new.how_to_act, "finish"
+  end
+
+  # Not shipping it is not a missing file, it is every agent class raising on load.
+  def test_the_core_skill_is_packaged
+    root = File.expand_path("..", __dir__)
+    spec = Dir.chdir(root) { Gem::Specification.load("omakase-agents.gemspec") }
+
+    assert_includes spec.files, "lib/omakase/skills/how_to_act/SKILL.md"
+  end
+
+  def test_code_act_points_at_the_core_skill
+    chat = FakeChat.new { {"result" => 0} }
+    InventoryAgent.new({"apple" => 1}, chat:).total_stock(items: [])
+
+    assert_includes chat.instructions.first, "how_to_act"
   end
 end
 
@@ -1018,8 +1302,9 @@ class MemoryTest < Minitest::Test
   end
 
   def test_both_methods_are_offered_to_the_model
-    assert_equal ["recall(query, limit:) — Search what you remember, by meaning; the closest few come back",
-      "remember(text) — Save something worth remembering after this run"],
-      Omakase::Capabilities.of(SupportAgent)
+    offered = Omakase::Capabilities.of(SupportAgent)
+
+    assert_includes offered, "recall(query, limit:) — Search what you remember, by meaning; the closest few come back"
+    assert_includes offered, "remember(text) — Save something worth remembering after this run"
   end
 end

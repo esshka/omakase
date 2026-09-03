@@ -2,7 +2,7 @@
 
 module Omakase
   # Runs model-written Ruby in the agent's own context.
-  # ponytail: instance_eval is not a sandbox — see Executor::Subprocess.
+  # ponytail: instance_eval is not a sandbox — Subprocess isolates a crash, not File.
   module Executor
     SOURCE = "(generated)"
     RESULT = :omakase_result
@@ -31,17 +31,19 @@ module Omakase
       observation([printed.string.chomp, failure(e, code)])
     end
 
-    # The model can only fix what it can locate, so point at the line.
+    # The model can only fix what it can locate, so point at the line. A
+    # SyntaxError has no generated frame to point from.
     def failure(error, code)
-      line = error.backtrace&.grep(TRACE)&.first&.slice(/:(\d+)/, 1)&.to_i
-      source = code.lines[line - 1]&.strip if line&.positive?
-      ["#{error.class}: #{error.message}", ("line #{line}: #{source}" if source)].compact.join("\n")
+      message = "#{error.class}: #{error.message}"
+      line = error.backtrace.grep(TRACE).first&.slice(/:(\d+)/, 1)&.to_i
+      return message unless line
+
+      "#{message}\nline #{line}: #{code.lines[line - 1].to_s.strip}"
     end
 
     def observation(parts)
       text = parts.reject(&:empty?).join("\n")
-      text = "#{text[0, MAX_OUTPUT]}\n… (truncated)" if text.length > MAX_OUTPUT
-      text.empty? ? "(no output)" : text
+      (text.length > MAX_OUTPUT) ? "#{text[0, MAX_OUTPUT]}\n… (truncated)" : text
     end
 
     # Thread-local, so concurrent agents never share a buffer. Agent#puts reads it.
@@ -59,74 +61,99 @@ module Omakase
     # That is isolation of fate, not of capability. Untrusted input still
     # belongs to :predict.
     #
-    # Ivars written in the child are marshalled back, so a generation's
-    # second tool call sees what the first one set. Methods the model
-    # defined on the object die with the child.
+    # Ivars written in the child are marshalled back one at a time, so a
+    # generation's second tool call sees what the first one set. Methods
+    # the model defined on the object die with the child.
     module Subprocess
       module_function
 
       def call(agent, code, timeout: TIMEOUT)
-        reader = writer = pid = nil
-        raise Error, "Executor::Subprocess needs Process.fork" unless Process.respond_to?(:fork)
-
-        reader, writer = IO.pipe
-        reader.binmode
-        writer.binmode
-        pid = fork do
-          reader.close
-          send_packet(writer, agent, Executor.call(agent, code, timeout:))
-        ensure
-          exit! 0
+        IO.pipe(binmode: true) do |reader, writer|
+          pid = fork do
+            reader.close
+            # Own process group, so a timeout can kill grandchildren too.
+            Process.setsid
+            # Parent owns the deadline; Timeout here would race it.
+            payload = pack(agent, Executor.call(agent, code, timeout: nil))
+            writer.write([payload.bytesize].pack("N"), payload)
+          ensure
+            exit! 0
+          end
+          writer.close
+          collect(reader, agent, pid, clock + timeout)
         end
-        writer.close
-        take_packet(reader, agent, pid, timeout)
-      ensure
-        reader.close if reader && !reader.closed?
-        reap(pid)
       end
 
-      def send_packet(io, agent, result)
-        io.write(dump(agent, result))
-      ensure
-        io.close
+      def collect(reader, agent, pid, deadline)
+        payload = read_packet(reader, deadline)
+        stop(pid) if payload == :timeout
+        status = reap(pid)
+        case payload
+        when :timeout then "execution timed out"
+        when :eof then "child process #{fate(status)}"
+        else unpack(agent, payload)
+        end
       end
 
-      def dump(agent, result)
-        Marshal.dump({result:, state: agent.marshal_dump})
+      def pack(agent, result)
+        kept, dropped = agent.marshal_dump.partition { |_, value| marshalable?(value) }
+        result = note_dropped(result, dropped.map(&:first))
+        Marshal.dump({result: carry(result), state: kept.to_h})
+      end
+
+      def marshalable?(value)
+        Marshal.dump(value)
+        true
       rescue TypeError
-        Marshal.dump({result: carry(result), state: nil})
+        false
       end
 
+      # A dropped ivar turns the answer into an observation: silent state loss
+      # would leave the next tool call reasoning about a value that is gone.
+      def note_dropped(result, dropped)
+        return result if dropped.empty?
+
+        prior = result.is_a?(Answer) ? [result.printed, "finish #{result.value.inspect}"].reject(&:empty?).join("\n") : result
+        Executor.observation([prior, "cannot keep #{dropped.join(", ")} across the process boundary"])
+      end
+
+      # Only an Answer can fail here — an observation is a String.
       def carry(result)
-        Marshal.dump(result)
-        result
-      rescue TypeError => e
-        klass = result.is_a?(Answer) ? result.value.class : result.class
-        Executor.observation(["cannot return #{klass} across the process boundary: #{e.message}"])
+        return result if marshalable?(result)
+
+        "cannot return #{result.value.class} across the process boundary"
       end
 
-      def take_packet(reader, agent, pid, timeout)
-        ready, = IO.select([reader], nil, nil, timeout)
-        return timed_out(pid) unless ready
-
-        payload = reader.read
-        return child_ended(pid) if payload.nil? || payload.empty?
-
+      def unpack(agent, payload)
         packet = Marshal.load(payload)
-        agent.marshal_load(packet[:state]) if packet[:state]
+        agent.marshal_load(packet[:state])
         packet[:result]
-      rescue TypeError, ArgumentError
-        child_ended(pid)
+      rescue ArgumentError, TypeError => e
+        "#{e.message}: a class defined in generated code does not survive the process boundary"
       end
 
-      def timed_out(pid)
-        stop(pid)
-        Executor.observation(["execution timed out"])
+      # Length-prefixed, so a leftover write-end cannot hang the parent.
+      def read_packet(io, deadline)
+        header = read_exactly(io, 4, deadline)
+        return header if header.is_a?(Symbol)
+
+        read_exactly(io, header.unpack1("N"), deadline)
       end
 
-      def child_ended(pid)
-        Executor.observation(["child process #{fate(reap(pid))}"])
+      # select is exact for a pipe, so readpartial cannot block past the deadline.
+      def read_exactly(io, n, deadline)
+        buf = "".b
+        while buf.bytesize < n
+          return :timeout unless IO.select([io], nil, nil, [deadline - clock, 0].max)
+
+          buf << io.readpartial(n - buf.bytesize)
+        end
+        buf
+      rescue EOFError
+        :eof
       end
+
+      def clock = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
       def fate(status)
         return "was killed" if status.nil? || status.signaled?
@@ -135,14 +162,16 @@ module Omakase
         "exited #{status.exitstatus}"
       end
 
+      # The child led its own group unless the deadline beat it to setsid.
       def stop(pid)
-        Process.kill("KILL", pid)
-      rescue Errno::ESRCH, TypeError
+        Process.kill("KILL", (Process.getpgid(pid) == pid) ? -pid : pid)
+      rescue Errno::ESRCH
         nil
       end
 
+      # ECHILD: the host reaps children itself, with a CHLD trap.
       def reap(pid)
-        Process.wait2(pid)&.last if pid
+        Process.wait2(pid).last
       rescue Errno::ECHILD
         nil
       end
