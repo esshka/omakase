@@ -771,6 +771,7 @@ Copy `.env.example` to `.env` and fill in a key; `MODEL` and `PROVIDER` there pi
 | [`interview_agent.rb`](examples/interview_agent.rb) | remembering across calls, without a shared chat |
 | [`memory_agent.rb`](examples/memory_agent.rb) | recall by meaning, kept across a marshalled run |
 | [`recursive_agent.rb`](examples/recursive_agent.rb) | a comment thread folded from the leaves up, one agent per node |
+| [`subprocess_agent.rb`](examples/subprocess_agent.rb) | generated code in a child process: a crash there is an observation here |
 
 ```bash
 bundle exec rake                     # tests and Standard, no network
