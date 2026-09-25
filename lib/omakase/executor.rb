@@ -23,12 +23,21 @@ module Omakase
     def call(agent, code, timeout: TIMEOUT)
       printed = StringIO.new
       answer = catch(RESULT) do
-        value = capturing(printed) { Timeout.timeout(timeout) { agent.instance_eval(code, SOURCE, 1) } }
+        value = capturing(printed) { Timeout.timeout(timeout) { evaluate(agent, code) } }
         return observation([printed.string.chomp, "=> #{value.inspect}"])
       end
       Answer.new(value: answer, printed: printed.string.chomp)
     rescue ScriptError, StandardError => e
       observation([printed.string.chomp, failure(e, code)])
+    rescue SystemExit
+      # In process, exit would end the host. exit! cannot be caught: Subprocess covers that.
+      observation([printed.string.chomp, "exit is not allowed — answer with finish(value)"])
+    end
+
+    # Inside a generation the inputs are locals; outside one, plain instance_eval.
+    def evaluate(agent, code)
+      scope = agent.respond_to?(:omakase_scope, true) && agent.send(:omakase_scope)
+      scope ? scope.eval(code, SOURCE, 1) : agent.instance_eval(code, SOURCE, 1)
     end
 
     # The model can only fix what it can locate, so point at the line. A
@@ -41,9 +50,13 @@ module Omakase
       "#{message}\nline #{line}: #{code.lines[line - 1].to_s.strip}"
     end
 
+    # Head and tail: the error or the value comes last, and it is what the model needs next.
     def observation(parts)
       text = parts.reject(&:empty?).join("\n")
-      (text.length > MAX_OUTPUT) ? "#{text[0, MAX_OUTPUT]}\n… (truncated)" : text
+      return text if text.length <= MAX_OUTPUT
+
+      half = MAX_OUTPUT / 2
+      "#{text[0, half]}\n… (#{text.length - MAX_OUTPUT} characters truncated)\n#{text[-half..]}"
     end
 
     # Thread-local, so concurrent agents never share a buffer. Agent#puts reads it.

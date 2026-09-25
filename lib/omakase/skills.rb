@@ -17,7 +17,7 @@ module Omakase
 
     def attach(agent_class, path)
       directory = File.expand_path(path)
-      front_matter, body = parse(File.read(File.join(directory, "SKILL.md")))
+      front_matter, body = parse(File.read(File.join(directory, "SKILL.md"), encoding: "UTF-8"))
       name = (front_matter["name"] || File.basename(directory)).tr("-", "_").to_sym
       raise Error, "#{agent_class} already has ##{name}" if Capabilities.names(agent_class).include?(name)
 
@@ -26,12 +26,19 @@ module Omakase
       name
     end
 
-    # The front matter every SKILL.md in the wild is written with.
+    # The front matter every SKILL.md in the wild is written with — CRLF too.
     def parse(text)
-      match = text.match(/\A---\n(.*?)\n---\n(.*)\z/m)
+      match = text.match(/\A---\r?\n(.*?)\r?\n---\r?\n(.*)\z/m)
       return [{}, text.strip] unless match
 
-      [YAML.safe_load(match[1]), match[2].strip]
+      [front_matter(match[1]), match[2].strip]
+    end
+
+    # Claude Code style hints like `argument-hint: "<x>" [-p]` are not YAML; read those line by line.
+    def front_matter(text)
+      YAML.safe_load(text)
+    rescue Psych::SyntaxError
+      text.scan(/^([\w-]+):[ \t]*(.*?)\r?$/).to_h
     end
   end
 end

@@ -6,6 +6,8 @@ module Omakase
     # through it, so the model composes calls in code instead of one per turn.
     class Ruby < RubyLLM::Tool
       BUDGET = 10
+      # Only a fence around the whole code: one inside it is part of a string.
+      FENCE = /\A```(?:ruby|rb)?[ \t]*\r?\n(.*?)\r?\n?```\z/m
 
       description <<~TEXT
         Evaluate Ruby in the context of the agent object: its methods and state are
@@ -33,6 +35,7 @@ module Omakase
       def done? = !@answer.nil? || @calls > @budget + 1
 
       def execute(code:)
+        code = code.strip[FENCE, 1] || code
         # Nothing bounds the provider's tool loop, so the budget does.
         @calls += 1
         return "No tool calls left — answer with what you have." if @calls == @budget + 1

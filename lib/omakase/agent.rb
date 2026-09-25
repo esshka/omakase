@@ -6,6 +6,9 @@ module Omakase
   class Agent
     # The generations this thread is inside, so one cannot re-enter itself.
     RUNNING = :omakase_running
+    # Each level opens a chat with a fresh tool budget, so depth is what bounds the cost.
+    # ponytail: a constant; a setting when a real tree needs more.
+    MAX_DEPTH = 10
     class << self
       # The model and any RubyLLM chat option. Naming a provider takes the model
       # id on trust, since providers like OpenRouter or Ollama serve ids that are
@@ -183,19 +186,43 @@ module Omakase
 
       # Generated code can see this method and call it. Each nested call opens its
       # own chat with its own tool budget, so the budget would bound nothing.
-      raise Error, "#{self.class}##{name} is already running — it cannot call itself" if running.include?(key)
+      raise Error, "#{self.class}##{name} is already running — it cannot call itself" if running.any? { |frame| frame[:key] == key }
+      raise Error, "#{self.class}##{name}: generations nest deeper than #{MAX_DEPTH}" if running.size >= MAX_DEPTH
 
-      running.push(key)
+      frame = {key:, inputs:}
+      running.push(frame)
       begin
         Omakase.emit(:generation, agent: self, name:, inputs:)
         value = generation.strategy.call(Request.new(agent: self, generation:, inputs:))
         Omakase.emit(:answer, agent: self, name:, value:)
         value
       rescue RubyLLM::Error, RubyLLM::ConfigurationError, RubyLLM::ModelNotFoundError => e
-        raise ProviderError, "#{self.class}##{name}: #{e.message}"
+        error = ProviderError.new("#{self.class}##{name}: #{e.message}")
+        Omakase.emit(:error, agent: self, name:, error:)
+        raise error
+      rescue => e
+        Omakase.emit(:error, agent: self, name:, error: e)
+        raise
       ensure
-        running.delete(key)
+        running.delete(frame)
       end
     end
+
+    # Where generated code runs during a generation: self is the agent and the
+    # inputs are locals, which then last for the rest of that generation.
+    def omakase_scope
+      frame = Thread.current[RUNNING]&.reverse_each&.find { |entry| entry[:key].first == object_id }
+      return unless frame
+
+      frame[:scope] ||= omakase_blank_binding.tap do |scope|
+        frame[:inputs].except(:with).each do |name, value|
+          scope.local_variable_set(name, value) if /\A[a-z_]\w*\z/.match?(name.to_s)
+        end
+      end
+    end
+
+    # A string instance_eval, so a `def` in generated code lands on this object
+    # alone — and no local of the caller leaks in.
+    def omakase_blank_binding = instance_eval("binding", __FILE__, __LINE__)
   end
 end

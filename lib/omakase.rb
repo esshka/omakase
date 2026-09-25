@@ -21,6 +21,8 @@ module Omakase
   ContractError = Class.new(Error)
   # The model or its provider failed. RubyLLM has already retried what it retries.
   ProviderError = Class.new(Error)
+  # What RubyLLM.chat itself takes; every other option is a `with_*` call on the chat.
+  CHAT_ARGUMENTS = %i[model provider protocol assume_model_exists context].freeze
 
   class << self
     # Providers, keys, default model, timeouts, logging — all of it is RubyLLM's.
@@ -68,7 +70,27 @@ module Omakase
       @chat_factory = callable!(factory, "chat_factory")
     end
 
-    def chat_factory = @chat_factory ||= ->(**options) { RubyLLM.chat(**options) }
+    def chat_factory = @chat_factory ||= method(:build_chat)
+
+    # `caching: true`, `thinking: {effort: :high}`, `temperature: 0.2` become the
+    # chat's own with_* calls. Caching is on unless you say `caching: false`: the
+    # tool loop resends the whole chat on every step.
+    def build_chat(**options)
+      chat = RubyLLM.chat(**options.slice(*CHAT_ARGUMENTS))
+      {caching: true, **options.except(*CHAT_ARGUMENTS)}.each do |name, value|
+        setter = :"with_#{name}"
+        raise Error, "unknown chat option #{name}: RubyLLM::Chat has no ##{setter}" unless chat.respond_to?(setter)
+
+        keywords = chat.method(setter).parameters.any? { |kind, _| kind == :keyrest }
+        case value
+        when true then chat.public_send(setter)
+        when Array then chat.public_send(setter, *value)
+        when Hash then keywords ? chat.public_send(setter, **value) : chat.public_send(setter, value)
+        else chat.public_send(setter, value)
+        end
+      end
+      chat
+    end
 
     # Every step, as it happens: a generation starts, model-written code runs,
     # an answer lands. Anything answering `call(event, **payload)` will do —

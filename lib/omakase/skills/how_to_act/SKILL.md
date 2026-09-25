@@ -21,12 +21,12 @@ stock_of("apple") + stock_of("pear")
 # => 7
 ```
 
-Ivars last for the rest of this generation:
+The inputs are local variables. Locals and ivars last for the rest of this generation:
 
 ```ruby
-@n = stock_of("apple")
+n = items.sum { |item| stock_of(item) }
 # later:
-finish(@n + 1)
+finish(n + 1)
 ```
 
 An object you do not know:
@@ -34,5 +34,7 @@ An object you do not know:
 ```ruby
 doc(orders.first)   # a class works too
 ```
+
+For meaning — classify, judge, summarize — call a generation method, not a regex. Never type out large data by hand: compute it or take it from an input.
 
 Prints come back to you, not to the process. If `finish` is refused, the message says why — fix it in the next call. Do not retype a value you already computed. Work in as few calls as you can.

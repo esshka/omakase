@@ -9,8 +9,21 @@ module Omakase
   # The script receives the chat, so it can drive the tool the way a model would:
   #
   #   Omakase::FakeChat.new { |chat| chat.run("finish(42)") }
+  #
+  # Or one reply per model turn, in order; a turn past the last one raises:
+  #
+  #   Omakase::FakeChat.replies("prose, not JSON", {"result" => 42})
   class FakeChat
     Response = Struct.new(:content)
+
+    def self.replies(*replies)
+      new do |chat|
+        raise Error, "FakeChat: no scripted reply left for turn #{chat.tasks.size}" if replies.empty?
+
+        reply = replies.shift
+        reply.respond_to?(:call) ? reply.call(chat) : reply
+      end
+    end
 
     attr_reader :instructions, :schema, :tools, :tasks, :attachments
 
@@ -23,7 +36,8 @@ module Omakase
       @complete = true
     end
 
-    def with_instructions(text) = tap { @instructions << text }
+    # A log of every call — the real chat replaces unless `append:`.
+    def with_instructions(text, **) = tap { @instructions << text }
 
     def with_schema(schema) = tap { @schema = schema }
 

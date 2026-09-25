@@ -191,7 +191,9 @@ FeedbackAgent.new.analyze(text: "…")
 
 By default they take whatever you pass. Name them with `takes:` and they become a real Ruby
 signature, so a missing or misspelled argument is an `ArgumentError` at the call rather than noise
-in a prompt — and the model reads the names instead of `**inputs`:
+in a prompt — and the model reads the names instead of `**inputs`. Under `:code_act` the inputs are
+also local variables in the generated code, so a long list or a record is used, not retyped; the
+prompt shows only the first 500 characters of each:
 
 ```ruby
 generates :decide, "Decide this refund.", takes: %i[email complaint], returns: Refund
@@ -264,7 +266,10 @@ class ApplicationAgent < Omakase::Agent
 end
 ```
 
-Naming a provider implies `assume_model_exists: true`; any other RubyLLM chat option passes through.
+Naming a provider implies `assume_model_exists: true`. Any other option is the chat's own `with_*`
+call — `temperature: 0.2`, `thinking: {effort: :high}`, `max_output_tokens: 2_000` — and an option
+RubyLLM::Chat has no `with_*` for raises. Prompt caching is on unless you say `caching: false`: the
+tool loop resends the whole chat on every step, and the instructions come first so they cache.
 Subclasses inherit the setting and can override it, so one `ApplicationAgent` configures the lot.
 
 A generation method can name its own model — a cheap one for classification beside a strong one
@@ -451,7 +456,8 @@ end
 A leaf is its own summary, so the model is asked only where there is something to fold. A fresh
 agent per branch is not ceremony either: siblings then share no state, and one object may not
 re-enter a generation it is already inside. That is refused, because a nested run opens its own chat
-with its own tool budget — nothing would bound the spend. Generated code can start a sub-agent the
+with its own tool budget — nothing would bound the spend. For the same reason generations nest ten
+deep at most. Generated code can start a sub-agent the
 same way. [`examples/recursive_agent.rb`](examples/recursive_agent.rb) is the runnable version: four
 comments, two of them leaves, two generations.
 
@@ -466,6 +472,9 @@ assert_equal "high", SupportAgent.new(chat:).triage(message: "broken")[:severity
 
 # drive the tool the way a model would
 chat = Omakase::FakeChat.new { |fake| fake.run("finish(stock_of(:apple))") }
+
+# one reply per model turn, in order; one turn too many raises
+chat = Omakase::FakeChat.replies("prose, not JSON", {"severity" => "high", "summary" => "…"})
 ```
 
 It records `instructions`, `schema`, `tools` and `tasks`, so the prompt is assertable too.
@@ -495,7 +504,7 @@ Omakase.listener = ->(event, **payload) { Rails.logger.info("#{event} #{payload.
 ```
 
 `:generation` carries `agent:, name:, inputs:` · `:ruby` carries `agent:, code:, outcome:` ·
-`:answer` carries `agent:, name:, value:`.
+`:answer` carries `agent:, name:, value:` · `:error` carries `agent:, name:, error:`.
 
 One listener is included, for reading a run rather than storing it: it prints each step to stderr,
 in colour when stderr is a terminal.
@@ -797,7 +806,9 @@ too. Two rules follow:
   write is remote code execution, resumed run or not.
 
 What is bounded: ten tool calls per generation, one run of a generation at a time, a 30-second
-timeout per execution, and 4KB of observation. The default executor uses Ruby's `Timeout` in this
+timeout per execution, and 4KB of observation — its start and its end, where the error is. `exit` in
+generated code is refused rather than ending your process; `exit!` cannot be caught, so only
+Subprocess survives it. The default executor uses Ruby's `Timeout` in this
 process — inside a database driver it can leave the connection unusable.
 `Omakase::Executor::Subprocess` is the reference swap: the same `instance_eval`, in a child process,
 so a timeout or a crash takes the child and not you. Ivars come back one at a time, so one Proc

@@ -7,17 +7,21 @@ module Omakase
 
     def schema = generation.schema
 
-    def instructions = [agent.class.instructions, agent.context].reject { |text| text.to_s.empty? }.join("\n\n")
+    def instructions = agent.class.instructions
+
+    # Rebuilt on every call, so it goes after what a provider can cache.
+    def context = agent.context.to_s
 
     # `with:` is reserved: files for the model to look at, passed through to
     # RubyLLM's `ask(with:)` as attachments rather than rendered into the text.
     def attachments = inputs[:with]
 
-    def task
+    # With `preview:`, the model's code holds the inputs, so the prompt only shows them.
+    def task(preview: false)
       arguments = inputs.except(:with)
       return prompt if arguments.empty?
 
-      lines = arguments.map { |name, value| "- #{name}: #{value.inspect}" }
+      lines = arguments.map { |name, value| "- #{name}: #{preview ? shorten(value.inspect) : value.inspect}" }
       "#{prompt}\n\nInputs:\n#{lines.join("\n")}"
     end
 
@@ -26,6 +30,14 @@ module Omakase
     def prompt
       text = generation.prompt
       text.is_a?(Proc) ? agent.instance_exec(&text) : text
+    end
+
+    # Past the limit, code_act shows the start of an input: the whole value is a local.
+    # ponytail: inspects the whole value, then cuts; a bounded printer if a huge input shows up in a profile.
+    def shorten(text, limit = 500)
+      return text if text.length <= limit
+
+      "#{text[0, limit]}… (#{text.length} characters — the whole value is in the local)"
     end
   end
 end

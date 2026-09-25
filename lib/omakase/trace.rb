@@ -5,7 +5,7 @@ module Omakase
   # A run reads top to bottom — the call, the code the model wrote, the answer.
   # Colour when the stream is a terminal, plain when it is a log.
   class Trace
-    COLOURS = {generation: 36, ruby: 33, answer: 32, mcp: 31}.freeze
+    COLOURS = {generation: 36, ruby: 33, answer: 32, error: 31, mcp: 31}.freeze
     LIMIT = 800
 
     def initialize(io: $stderr)
@@ -18,13 +18,16 @@ module Omakase
       when :generation then ["→ #{agent.class}##{payload[:name]}", inputs(payload[:inputs])]
       when :ruby then ["· ruby", "#{payload[:code].strip}\n#{outcome(payload[:outcome])}"]
       when :answer then ["← #{agent.class}##{payload[:name]}", truncate(payload[:value].inspect)]
+      when :error then ["✗ #{agent.class}##{payload[:name]}", truncate("#{payload[:error].class}: #{payload[:error].message}")]
       # A down sidecar is not an error the run raises, so nothing else would say it.
       when :mcp then ["! #{agent} mcp #{payload[:name]}", truncate(payload[:error].message)]
       else return # a listener that raises takes the run down with it
       end
 
-      @io.puts(paint(event, head))
-      @io.puts(body.gsub(/^/, "    ")) unless body.empty?
+      # A generation called from generated code sits inside its caller's.
+      indent = "    " * [(Thread.current[Agent::RUNNING]&.size || 1) - 1, 0].max
+      @io.puts(indent + paint(event, head))
+      @io.puts(body.gsub(/^/, "#{indent}    ")) unless body.empty?
     end
 
     private

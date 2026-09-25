@@ -56,8 +56,8 @@ module Omakase
       raise ContractError, "expected #{describe}, got #{value.inspect}" unless value.is_a?(Hash)
 
       data = symbolize(value)
-      missing = json.fetch("required").map(&:to_sym) - data.keys
-      raise ContractError, "missing #{missing.join(", ")} — expected #{describe}" if missing.any?
+      problem = object_mismatch(data, json, nil)
+      raise ContractError, "#{problem} — expected #{describe}" if problem
 
       data
     end
@@ -85,10 +85,43 @@ module Omakase
     end
 
     def demand(value, type)
-      matched = (type == "boolean") ? [true, false].include?(value) : value.is_a?(RUBY_TYPES.fetch(type))
-      raise ContractError, "expected <#{type}>, got #{value.inspect}" unless matched
+      raise ContractError, "expected <#{type}>, got #{value.inspect}" unless type?(value, type)
 
       value
+    end
+
+    def type?(value, type)
+      case type
+      when "boolean" then [true, false].include?(value)
+      when "null" then value.nil?
+      when Array then type.any? { |each| type?(value, each) }
+      else value.is_a?(RUBY_TYPES.fetch(type, BasicObject))
+      end
+    end
+
+    # The first place a nested value breaks its schema, as a path the model can fix.
+    def mismatch(value, spec, path)
+      return "#{path}: expected <#{Array(spec["type"]).join("|")}>, got #{value.inspect}" if spec["type"] && !type?(value, spec["type"])
+      return "#{path}: expected one of #{spec["enum"].inspect}, got #{value.inspect}" if spec["enum"] && !spec["enum"].include?(value)
+
+      case value
+      when Array then value.each_with_index.filter_map { |item, i| mismatch(item, spec["items"], "#{path}[#{i}]") if spec["items"] }.first
+      when Hash then object_mismatch(value, spec, path)
+      end
+    end
+
+    # An optional field left nil is a field left out, which is allowed.
+    def object_mismatch(value, spec, path)
+      required = Array(spec["required"])
+      missing = required.map(&:to_sym) - value.keys
+      return [path, "missing #{missing.join(", ")}"].compact.join(": ") if missing.any?
+
+      Hash(spec["properties"]).filter_map do |name, child|
+        field = value[name.to_sym]
+        next if field.nil? && !required.include?(name)
+
+        mismatch(field, child, [path, name].compact.join(".")) if value.key?(name.to_sym)
+      end.first
     end
   end
 end

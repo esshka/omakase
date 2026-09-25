@@ -138,7 +138,8 @@ class CodeActTest < Minitest::Test
     chat = chat_running("stock_of('apple') + stock_of('pear')", observed:, answer: {"result" => 7})
 
     assert_equal 7, InventoryAgent.new({"apple" => 3, "pear" => 4}, chat:).total_stock(items: %w[apple pear])
-    assert_equal ["=> 7"], observed
+    # Once, then again after the nudge to call finish.
+    assert_equal ["=> 7", "=> 7"], observed
     assert_equal "ruby", chat.tools.first.name
     assert_includes chat.tasks.last, "Work done:\ndone"
   end
@@ -568,7 +569,7 @@ class SubprocessExecutorTest < Minitest::Test
   def test_output_past_the_cap_is_truncated_before_it_crosses
     observation = call("puts('x' * 10_000)")
 
-    assert_includes observation, "(truncated)"
+    assert_includes observation, "characters truncated"
     assert_operator observation.length, :<, 5_000
   end
 
@@ -589,7 +590,8 @@ class SubprocessExecutorTest < Minitest::Test
   end
 
   def test_a_child_that_leaves_without_answering_says_so
-    observation = call("exit 0")
+    # exit! skips every rescue; a plain exit is caught before it reaches the pipe.
+    observation = call("exit!(0)")
 
     assert_equal "child process ended without an answer", observation
   end
@@ -1276,8 +1278,10 @@ class ContextTest < Minitest::Test
 
     2.times { agent.ask("hello") }
 
-    assert_includes chat.instructions.last, "You are interviewing a candidate."
-    assert_includes chat.instructions.last, "Already asked:\nAnd after that?"
+    # The stable text first, the context appended after it.
+    stable, context = chat.instructions.last(2)
+    assert_includes stable, "You are interviewing a candidate."
+    assert_equal "Already asked:\nAnd after that?", context
   end
 end
 
