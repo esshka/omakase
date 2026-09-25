@@ -90,7 +90,7 @@ class HardeningTest < Minitest::Test
 
     Omakase::Strategies::Predict.instruct(chat, "stable", "changes")
 
-    assert_equal [["stable", true], ["changes", false]], chat.messages.map { [_1.content, _1.cache_until_here?] }
+    assert_equal [["stable", true], ["changes", false]], chat.messages.map { |message| [message.content, message.cache_until_here?] }
   ensure
     RubyLLM.config.openai_api_key = nil
   end
