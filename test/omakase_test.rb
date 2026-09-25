@@ -60,6 +60,13 @@ class LoopAgent < Omakase::Agent
 end
 
 class PredictTest < Minitest::Test
+  # RubyLLM 2 returns structured output as a JSON string, not a Hash.
+  def test_structured_output_arrives_as_a_json_string
+    chat = FakeChat.new { %({"result":"positive"}) }
+
+    assert_equal "positive", FeedbackAgent.new(chat:).sentiment_of(text: "love it")
+  end
+
   def test_a_scalar_return_type_unwraps_to_the_value
     chat = FakeChat.new { {"result" => "positive"} }
 
@@ -254,7 +261,17 @@ class CodeActTest < Minitest::Test
 
     2.times { assert_equal "=> 1", tool.execute(code: "1") }
     assert_match(/No tool calls left/, tool.execute(code: "1"))
-    assert_instance_of RubyLLM::Tool::Halt, tool.execute(code: "1")
+    assert_equal "Tool budget spent.", tool.execute(code: "1")
+    assert tool.done?
+  end
+
+  def test_a_call_after_finish_in_the_same_round_does_not_run
+    agent = InventoryAgent.new({})
+    tool = Omakase::Tools::Ruby.new(agent, Omakase::Schema.define(returns: :integer))
+
+    assert_equal "Answer accepted.", tool.execute(code: "finish(1)")
+    assert_equal "Answer already accepted.", tool.execute(code: "@touched = true")
+    refute agent.instance_variable_defined?(:@touched)
   end
 
   def test_instructions_list_the_agents_methods_but_not_the_one_being_written
@@ -408,7 +425,7 @@ class ReliabilityTest < Minitest::Test
   end
 
   def test_provider_failures_arrive_as_one_error_type
-    chat = FakeChat.new { raise RubyLLM::RateLimitError.new(nil, "slow down") }
+    chat = FakeChat.new { raise RubyLLM::RateLimitError.new("slow down") }
 
     error = assert_raises(Omakase::ProviderError) { FeedbackAgent.new(chat:).sentiment_of(text: "x") }
     assert_match(/FeedbackAgent#sentiment_of/, error.message)
@@ -419,7 +436,7 @@ class ReliabilityTest < Minitest::Test
   def test_the_fake_chat_still_stands_in_for_the_real_one
     fake = Omakase::FakeChat.instance_methods(false)
 
-    %i[with_instructions with_schema with_tool ask].each do |name|
+    %i[with_instructions with_schema with_tools ask ask_later step complete?].each do |name|
       assert_includes fake, name
       assert RubyLLM::Chat.method_defined?(name), "RubyLLM::Chat##{name} is gone"
     end

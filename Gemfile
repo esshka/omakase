@@ -2,7 +2,7 @@
 
 source "https://rubygems.org"
 
-gem "ruby_llm", "~> 1.16"
+gem "ruby_llm", "~> 2.0"
 gem "schematist", "~> 1.1"
 gem "zeitwerk", "~> 2.7"
 
@@ -14,7 +14,6 @@ group :development, :test do
   gem "minitest"
   gem "railties"
   gem "rake"
-  gem "ruby_llm-mcp", "~> 1.0"
   gem "standard"
   gem "sqlite3"
 end

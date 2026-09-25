@@ -14,7 +14,7 @@ end
 
 ActiveSupport::Notifications.subscribe("chat.ruby_llm") do |event|
   usage = event.payload
-  puts "[llm] #{usage[:model]} #{event.duration.round}ms in=#{usage[:input_tokens]} out=#{usage[:output_tokens]}"
+  puts "[llm] #{usage[:model]} #{event.duration.round}ms in=#{usage[:tokens].input} out=#{usage[:tokens].output}"
 end
 
 # --- app/agents/support_agent.rb ---------------------------------------------

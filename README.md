@@ -288,7 +288,8 @@ end
 
 An MCP server's tools become methods on the agent, listed among its capabilities like any other —
 so generated code calls a remote tool and the agent's own methods in the same expression. Add the
-`ruby_llm-mcp` gem; options are passed to it verbatim.
+`ruby_llm-mcp` gem; options are passed to it verbatim. Its 1.0 release still pins RubyLLM 1.x, so
+this waits on a `ruby_llm-mcp` that supports RubyLLM 2.
 
 ```ruby
 class DocsAgent < ApplicationAgent
@@ -538,7 +539,7 @@ logs and APM without any code of ours:
 
 ```ruby
 ActiveSupport::Notifications.subscribe("chat.ruby_llm") do |*, payload|
-  Rails.logger.info(model: payload[:model], input: payload[:input_tokens], output: payload[:output_tokens])
+  Rails.logger.info(model: payload[:model], input: payload[:tokens].input, output: payload[:tokens].output)
 end
 ```
 

@@ -13,7 +13,7 @@ module Omakase
         expression, is returned to you. Call finish(value) to answer.
       TEXT
 
-      param :code, desc: "Ruby source to evaluate."
+      parameter :code, description: "Ruby source to evaluate."
 
       attr_reader :answer
 
@@ -29,11 +29,16 @@ module Omakase
 
       def name = "ruby"
 
+      # RubyLLM 2 tools cannot end the loop, so the strategy asks this between steps.
+      def done? = !@answer.nil? || @calls > @budget + 1
+
       def execute(code:)
         # Nothing bounds the provider's tool loop, so the budget does.
         @calls += 1
         return "No tool calls left — answer with what you have." if @calls == @budget + 1
-        return halt("Tool budget spent.") if @calls > @budget + 1
+        return "Tool budget spent." if @calls > @budget + 1
+        # A later call in the same round must not act on an agent that has answered.
+        return "Answer already accepted." if @answer
 
         outcome = @executor.call(@agent, code, timeout: @timeout)
         Omakase.emit(:ruby, agent: @agent, code:, outcome:)
@@ -42,7 +47,7 @@ module Omakase
         raise Error, "executor must return a String or Executor::Answer, got #{outcome.class}" unless outcome.is_a?(Executor::Answer)
 
         @answer = Executor::Answer.new(value: @schema.take(outcome.value), printed: outcome.printed)
-        halt("Answer accepted.")
+        "Answer accepted."
       rescue ContractError => e
         # Off-contract answers are corrected inside the same loop, not by another request.
         # Anything else — a broken executor, a bad configuration — is not the model's to fix.

@@ -30,7 +30,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir["lib/**/*.rb", "lib/**/SKILL.md"] + %w[README.md CHANGELOG.md LICENSE]
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "ruby_llm", "~> 1.16"
+  spec.add_dependency "ruby_llm", "~> 2.0"
   spec.add_dependency "schematist", "~> 1.1"
   spec.add_dependency "zeitwerk", "~> 2.7"
 end

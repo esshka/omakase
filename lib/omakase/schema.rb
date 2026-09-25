@@ -43,9 +43,10 @@ module Omakase
 
     # From the provider's JSON: unwrap first, then hold it to the contract.
     def cast(content)
+      content = parse(content) if content.is_a?(String)
       raise ContractError, "expected JSON matching #{JSON.generate(json)}, got #{content.inspect}" unless content.is_a?(Hash)
 
-      data = RubyLLM::Utils.deep_symbolize_keys(content)
+      data = symbolize(content)
       take(wrapped? ? data.fetch(RESULT) { raise ContractError, %(missing "result" in #{data.inspect}) } : data)
     end
 
@@ -54,7 +55,7 @@ module Omakase
       return demand(value, properties.fetch("result")["type"]) if wrapped?
       raise ContractError, "expected #{describe}, got #{value.inspect}" unless value.is_a?(Hash)
 
-      data = RubyLLM::Utils.deep_symbolize_keys(value)
+      data = symbolize(value)
       missing = json.fetch("required").map(&:to_sym) - data.keys
       raise ContractError, "missing #{missing.join(", ")} — expected #{describe}" if missing.any?
 
@@ -66,6 +67,22 @@ module Omakase
     private
 
     def properties = json.fetch("properties")
+
+    # RubyLLM 2 hands structured output back as a JSON string. Not JSON stays a
+    # String, so cast reports what the model actually said.
+    def parse(content)
+      JSON.parse(content)
+    rescue JSON::ParserError
+      content
+    end
+
+    def symbolize(value)
+      case value
+      when Hash then value.to_h { |key, item| [key.respond_to?(:to_sym) ? key.to_sym : key, symbolize(item)] }
+      when Array then value.map { |item| symbolize(item) }
+      else value
+      end
+    end
 
     def demand(value, type)
       matched = (type == "boolean") ? [true, false].include?(value) : value.is_a?(RUBY_TYPES.fetch(type))

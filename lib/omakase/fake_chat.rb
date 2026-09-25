@@ -20,19 +20,30 @@ module Omakase
       @tools = []
       @tasks = []
       @attachments = []
+      @complete = true
     end
 
     def with_instructions(text) = tap { @instructions << text }
 
     def with_schema(schema) = tap { @schema = schema }
 
-    def with_tool(tool, **) = tap { @tools << tool }
+    def with_tools(*tools) = tap { @tools.concat(tools) }
 
-    def ask(task, with: nil)
+    def ask(task, with: nil) = ask_later(task, with:).step
+
+    def ask_later(task, with: nil)
       @tasks << task
       @attachments << with if with
+      tap { @complete = false }
+    end
+
+    # The whole script is one step: it answers, so the chat is then complete.
+    def step
+      @complete = true
       Response.new(@script.call(self))
     end
+
+    def complete? = @complete
 
     # Run code the way the model would, through the agent's one tool.
     def run(code) = tools.fetch(0).call(code:)

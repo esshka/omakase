@@ -9,13 +9,14 @@ module Omakase
 
       def call(request)
         tool = Tools::Ruby.new(request.agent, request.schema)
-        notes = request.chat
+        chat = request.chat
           .with_instructions(instructions(request))
-          .with_tool(tool)
-          .ask(request.task, with: request.attachments)
-          .content
-
+          .with_tools(tool)
+          .ask_later(request.task, with: request.attachments)
+        response = chat.step until chat.complete? || tool.done?
         return tool.answer.value if tool.answer
+
+        notes = response&.content
 
         # It never called finish. A JSON answer can still be given in a tool-free turn.
         return Predict.call(request, task: "#{request.task}\n\nWork done:\n#{notes}") unless request.schema.code_only?
