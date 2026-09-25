@@ -5,7 +5,7 @@ module Omakase
   # A run reads top to bottom — the call, the code the model wrote, the answer.
   # Colour when the stream is a terminal, plain when it is a log.
   class Trace
-    COLOURS = {generation: 36, ruby: 33, answer: 32}.freeze
+    COLOURS = {generation: 36, ruby: 33, answer: 32, mcp: 31}.freeze
     LIMIT = 800
 
     def initialize(io: $stderr)
@@ -18,6 +18,8 @@ module Omakase
       when :generation then ["→ #{agent.class}##{payload[:name]}", inputs(payload[:inputs])]
       when :ruby then ["· ruby", "#{payload[:code].strip}\n#{outcome(payload[:outcome])}"]
       when :answer then ["← #{agent.class}##{payload[:name]}", truncate(payload[:value].inspect)]
+      # A down sidecar is not an error the run raises, so nothing else would say it.
+      when :mcp then ["! #{agent} mcp #{payload[:name]}", truncate(payload[:error].message)]
       else return # a listener that raises takes the run down with it
       end
 

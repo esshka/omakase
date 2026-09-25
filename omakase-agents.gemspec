@@ -27,7 +27,7 @@ Gem::Specification.new do |spec|
     "rubygems_mfa_required" => "true"
   }
 
-  spec.files = Dir["lib/**/*.rb"] + %w[README.md CHANGELOG.md LICENSE]
+  spec.files = Dir["lib/**/*.rb", "lib/**/SKILL.md"] + %w[README.md CHANGELOG.md LICENSE]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "ruby_llm", "~> 1.16"

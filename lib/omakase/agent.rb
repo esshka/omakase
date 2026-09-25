@@ -31,9 +31,14 @@ module Omakase
 
       # An MCP server's tools, as methods on the agent. Options are passed to
       # `ruby_llm-mcp` verbatim: `mcp :files, transport_type: :stdio, config: {command: "npx", …}`.
-      def mcp(name, **options)
-        require "ruby_llm/mcp"
-        MCP.attach(self, RubyLLM::MCP.add_client(name: name.to_s, **options))
+      # The server opens on the first instance, not at class load.
+      def mcp(name, **options) = MCP.defer(self, name, options)
+
+      # Here rather than in `initialize`, which a subclass may override and
+      # never call super from — and then generate with none of its tools.
+      def new(...)
+        MCP.ensure(self)
+        super
       end
 
       # A skill directory — a SKILL.md with YAML front matter. Its description
@@ -124,6 +129,7 @@ module Omakase
         subclass.strategy(@strategy) if @strategy
         subclass.generations.merge!(generations)
         subclass.descriptions.merge!(descriptions)
+        Skills.attach_core(subclass)
       end
     end
 

@@ -6,7 +6,14 @@ module Omakase
   # capabilities; the body only arrives when the model calls the method — which
   # is all "loaded on demand" has to mean.
   module Skills
+    CORE = File.expand_path("skills/how_to_act", __dir__)
+
     module_function
+
+    # Every agent gets the how-to. Skip when a parent already defined it.
+    def attach_core(agent_class)
+      attach(agent_class, CORE) unless Capabilities.names(agent_class).include?(:how_to_act)
+    end
 
     def attach(agent_class, path)
       directory = File.expand_path(path)
