@@ -3,6 +3,47 @@
 One entry per released version, written when the gem is pushed. Until `1.0`, a minor version may
 move the API — what breaks is listed first, so an upgrade is a decision rather than a surprise.
 
+## 0.4.0
+
+RubyLLM 2.0 underneath, and MCP waits for it. Generated code gets its inputs as locals, can crash in
+a child process instead of yours, and its answer is checked all the way down.
+
+### Breaking
+
+- RubyLLM `~> 2.0`. `ruby_llm-mcp` has no release for it yet, so `mcp` servers do not connect until
+  it does; the `mcp` declaration itself still loads.
+- Prompt caching is on for every chat Omakase builds. `model "…", caching: false` turns it off.
+- A text reply under `:code_act` gets one more turn in the same chat — "call finish" — before the
+  fallback to `:predict`. One more model call when a model forgets how to answer.
+- `finish` is held to the whole schema: nested objects, array items, enums. An answer 0.3 took can
+  now be refused, with the path of the mistake (`tags[0]: expected <string>, got 1`).
+- Chat options other than the model are the chat's own `with_*` calls — `temperature: 0.2`,
+  `thinking: {effort: :high}` — and one RubyLLM::Chat has no `with_*` for raises. 0.3 passed them
+  to `RubyLLM.chat`, which refused them anyway.
+- Generations nest ten deep at most.
+
+### Added
+
+- `Omakase::Executor::Subprocess`: generated code in a forked child, so a timeout or a crash takes
+  the child and not you. Ivars come back; the child still reaches what this process reaches.
+- Under `:code_act` the inputs are local variables in the generated code, and locals last for the
+  rest of the generation. The prompt shows only the first 500 characters of each input.
+- Every agent has `how_to_act`, a built-in skill: how to write the Ruby — `finish`, prints, `doc`,
+  locals — with examples.
+- The instructions go first and are marked as a cache boundary; `context` follows them.
+- `FakeChat.replies(a, b)`: one reply per model turn, and a turn past the last one raises.
+- A `:error` event; `Omakase::Trace` prints it and indents nested generations.
+
+### Fixed
+
+- `exit` in generated code no longer ends your process; the model is told to `finish` instead.
+- An observation past 4KB keeps its end as well as its start, so the error is not the part cut off.
+- MCP servers connect on the first instance, not at class load: an unreachable sidecar does not
+  fail boot, and a reload does not reconnect.
+- A ```ruby fence around the whole code is stripped before it runs.
+- SKILL.md is read as UTF-8, CRLF front matter is read, and front matter that is not YAML falls back
+  to plain `key: value` lines.
+
 ## 0.3.0
 
 One thing changes under you: a generation may no longer call itself. The rest is additions — a real
