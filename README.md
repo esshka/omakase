@@ -57,6 +57,12 @@ Against **RubyLLM alone**: the tool loop, the schema plumbing, and the correctio
 answer are what these 800 lines are. Everything else — providers, keys, models, streaming, tracing —
 is still RubyLLM's, and stays reachable.
 
+Against **`RubyLLM::Agent`**: that is a chat preset — model, tools, instructions and a schema kept
+on a class, handing back a `RubyLLM::Chat`, with Rails persistence of the conversation. Reach for it
+when the product is the chat. Here the product is a method: `generates` defines one the model
+implements, the agent's own methods and fields are its tools and state, and the call returns a typed
+value. Both sit on RubyLLM and do not overlap.
+
 Against **a framework with a tool registry**: there is nothing to register and nothing to keep in
 sync. The model gets one tool, `ruby`, and reaches the rest through the object. A tool's description
 is `describe`, a line above the method, instead of a JSON schema that drifts from the code it
